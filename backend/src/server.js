@@ -196,17 +196,38 @@ app.post('/api/certificates/issue', async (req, res) => {
       return res.status(400).json({ error: 'certId and studentId are required' });
     }
 
+    let resolvedStudentName = studentName;
+    let resolvedDepartment = department;
+
+    // Automatically resolve student name and department from ledger registration
+    try {
+      const studentBytes = await queryChaincode('GetStudent', [studentId]);
+      if (studentBytes) {
+        const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+        if (studentObj && studentObj.name) {
+          resolvedStudentName = resolvedStudentName || studentObj.name;
+          resolvedDepartment = resolvedDepartment || studentObj.department;
+        }
+      }
+    } catch (e) {
+      console.warn(`[Student Lookup] Could not fetch student ${studentId}: ${e.message}`);
+    }
+
+    if (!resolvedStudentName) {
+      resolvedStudentName = 'Student Name';
+    }
+
     const issueDate = new Date().toISOString().substring(0, 10);
     const createdAt = new Date().toISOString();
 
-    // 1. Generate PDF Document
+    // 1. Generate PDF Document with NIT Warangal branding & student details
     const pdfBuffer = await generateCertificatePDF({
       certId,
       requestId,
       studentId,
-      studentName: studentName || 'Academic Student',
-      department: department || 'Computer Science & Engineering',
-      certType: certType || 'Bachelor of Technology',
+      studentName: resolvedStudentName,
+      department: resolvedDepartment || 'Computer Science & Engineering',
+      certType: certType || 'Bachelor of Technology in Computer Science & Engineering',
       issueDate,
       createdAt
     });
