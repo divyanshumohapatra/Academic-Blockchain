@@ -36,8 +36,8 @@ export default function IssuanceModule({ trackedRequest, onCertificateIssued }) 
           certId,
           requestId: trackedRequest.requestId,
           studentId: trackedRequest.studentId,
-          certType: trackedRequest.certType,
-          studentName: trackedRequest.details?.name || 'Academic Student',
+          certType: trackedRequest.certType || 'Master of Computer Applications (MCA)',
+          studentName: trackedRequest.details?.name || trackedRequest.studentName || '',
           department: trackedRequest.details?.department || 'Computer Science & Engineering'
         })
       });

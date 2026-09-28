@@ -17,7 +17,7 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
   const [reqForm, setReqForm] = useState({
     requestId: 'REQ-2024-001',
     studentId: 'STU-2024-001',
-    certType: 'Bachelor of Technology in CSE'
+    certType: 'Master of Computer Applications (MCA)'
   });
   const [trackedRequest, setTrackedRequest] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -176,15 +176,17 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
           </div>
 
           <div className="form-group">
-            <label htmlFor="reqCertType">Degree / Certificate Type:</label>
+            <label htmlFor="reqCertType">Degree / Certificate Type (CSE Dept):</label>
             <select 
               id="reqCertType"
               value={reqForm.certType}
               onChange={(e) => setReqForm({ ...reqForm, certType: e.target.value })}
             >
-              <option value="Bachelor of Technology in CSE">Bachelor of Technology in CSE</option>
+              <option value="Master of Computer Applications (MCA)">Master of Computer Applications (MCA)</option>
+              <option value="Bachelor of Technology in Computer Science & Engineering">Bachelor of Technology in Computer Science & Engineering</option>
+              <option value="Master of Technology in Computer Science & Engineering">Master of Technology in Computer Science & Engineering</option>
               <option value="Master of Science in Data Science">Master of Science in Data Science</option>
-              <option value="Bachelor of Science in AI & Robotics">Bachelor of Science in AI & Robotics</option>
+              <option value="Doctor of Philosophy (Ph.D.) in Computer Science">Doctor of Philosophy (Ph.D.) in Computer Science</option>
               <option value="Executive Post Graduate Diploma">Executive Post Graduate Diploma</option>
             </select>
           </div>

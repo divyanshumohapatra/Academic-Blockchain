@@ -89,11 +89,35 @@ app.post('/api/requests', async (req, res) => {
       return res.status(400).json({ error: 'requestId and studentId are required' });
     }
 
+    let requestDetails = details || {};
+    if (typeof requestDetails === 'string') {
+      try {
+        requestDetails = JSON.parse(requestDetails);
+      } catch (e) {
+        requestDetails = { raw: requestDetails };
+      }
+    }
+
+    // Auto-enrich details with registered student data if missing
+    try {
+      const studentBytes = await queryChaincode('GetStudent', [studentId]);
+      if (studentBytes) {
+        const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+        if (studentObj) {
+          requestDetails.name = requestDetails.name || studentObj.name;
+          requestDetails.department = requestDetails.department || studentObj.department;
+          requestDetails.email = requestDetails.email || studentObj.email;
+        }
+      }
+    } catch (e) {
+      console.warn(`[Request Creation] Student lookup note: ${e.message}`);
+    }
+
     const result = await invokeChaincode('RequestCertificate', [
       requestId,
       studentId,
-      certType || 'Degree Certificate',
-      JSON.stringify(details || {})
+      certType || 'Master of Computer Applications (MCA)',
+      JSON.stringify(requestDetails)
     ], 1);
 
     res.status(201).json({ success: true, result });
@@ -196,21 +220,45 @@ app.post('/api/certificates/issue', async (req, res) => {
       return res.status(400).json({ error: 'certId and studentId are required' });
     }
 
-    let resolvedStudentName = studentName;
-    let resolvedDepartment = department;
+    let resolvedStudentName = (studentName && studentName !== 'Academic Student' && studentName !== 'Student Name') ? studentName : null;
+    let resolvedDepartment = (department && department !== 'General') ? department : null;
+    let resolvedCertType = certType;
 
-    // Automatically resolve student name and department from ledger registration
+    // 1. Automatically resolve student name and department from ledger registration
     try {
       const studentBytes = await queryChaincode('GetStudent', [studentId]);
       if (studentBytes) {
         const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
         if (studentObj && studentObj.name) {
-          resolvedStudentName = resolvedStudentName || studentObj.name;
-          resolvedDepartment = resolvedDepartment || studentObj.department;
+          resolvedStudentName = studentObj.name;
+          if (studentObj.department) {
+            resolvedDepartment = studentObj.department;
+          }
         }
       }
     } catch (e) {
       console.warn(`[Student Lookup] Could not fetch student ${studentId}: ${e.message}`);
+    }
+
+    // 2. If still missing, check request details on ledger
+    if ((!resolvedStudentName || !resolvedCertType) && requestId) {
+      try {
+        const reqBytes = await queryChaincode('GetCertificateRequest', [requestId]);
+        if (reqBytes) {
+          const reqObj = typeof reqBytes === 'string' ? JSON.parse(reqBytes) : reqBytes;
+          if (!resolvedStudentName && reqObj?.details?.name) {
+            resolvedStudentName = reqObj.details.name;
+          }
+          if (!resolvedDepartment && reqObj?.details?.department) {
+            resolvedDepartment = reqObj.details.department;
+          }
+          if (!resolvedCertType && reqObj?.certType) {
+            resolvedCertType = reqObj.certType;
+          }
+        }
+      } catch (e) {
+        console.warn(`[Request Lookup] Could not fetch request ${requestId}: ${e.message}`);
+      }
     }
 
     if (!resolvedStudentName) {
@@ -227,7 +275,7 @@ app.post('/api/certificates/issue', async (req, res) => {
       studentId,
       studentName: resolvedStudentName,
       department: resolvedDepartment || 'Computer Science & Engineering',
-      certType: certType || 'Bachelor of Technology in Computer Science & Engineering',
+      certType: resolvedCertType || 'Master of Computer Applications (MCA)',
       issueDate,
       createdAt
     });
