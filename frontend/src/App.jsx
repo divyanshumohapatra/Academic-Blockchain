@@ -7,13 +7,15 @@ import IssuanceModule from './components/IssuanceModule';
 import EmployerPortal from './components/EmployerPortal';
 import RevocationModule from './components/RevocationModule';
 import LedgerExplorer from './components/LedgerExplorer';
+import AgenticModule from './components/AgenticModule';
 import { 
   ClipboardList, 
   UserCheck, 
   Search, 
   ShieldAlert, 
   Database,
-  Building2
+  Building2,
+  Bot
 } from 'lucide-react';
 
 export default function App() {
@@ -51,19 +53,25 @@ export default function App() {
               </button>
 
               <button 
+                className={`tab-btn ${activeTab === 'agents' ? 'active' : ''}`}
+                onClick={() => setActiveTab('agents')}
+                style={{
+                  background: activeTab === 'agents' ? 'linear-gradient(135deg, #4f46e5, #0284c7)' : 'rgba(79, 70, 229, 0.12)',
+                  borderColor: '#6366f1',
+                  color: '#fff',
+                  fontWeight: '600'
+                }}
+              >
+                <Bot size={16} />
+                🤖 Autonomous Agentic Engine
+              </button>
+
+              <button 
                 className={`tab-btn ${activeTab === 'students' ? 'active' : ''}`}
                 onClick={() => setActiveTab('students')}
               >
                 <UserCheck size={16} />
                 Student Registration
-              </button>
-
-              <button 
-                className={`tab-btn ${activeTab === 'verify' ? 'active' : ''}`}
-                onClick={() => setCurrentView('employer')}
-              >
-                <Search size={16} />
-                Verification Portal
               </button>
 
               <button 
@@ -90,12 +98,21 @@ export default function App() {
                   activeRequestId={activeRequestId}
                   setActiveRequestId={setActiveRequestId}
                   onReadyToIssue={(req) => setReadyRequest(req)}
+                  onSwitchToAgents={() => setActiveTab('agents')}
                 />
                 <IssuanceModule 
                   trackedRequest={readyRequest}
                   onCertificateIssued={() => setActiveTab('ledger')}
                 />
               </>
+            )}
+
+            {activeTab === 'agents' && (
+              <AgenticModule 
+                activeRequestId={activeRequestId}
+                setActiveRequestId={setActiveRequestId}
+                onGoToLedger={() => setActiveTab('ledger')}
+              />
             )}
 
             {activeTab === 'students' && <StudentModule />}
@@ -110,7 +127,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <p>Academic Blockchain Consortium • Hyperledger Fabric 2.5 Multi-Org Network (Org1, Org2, Org3) • React 18 UI</p>
+        <p>Academic Blockchain Consortium • Hyperledger Fabric 2.5 Multi-Org Network (Org1, Org2, Org3) • Autonomous Multi-Agent AI</p>
       </footer>
     </div>
   );

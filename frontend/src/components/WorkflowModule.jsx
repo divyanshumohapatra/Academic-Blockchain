@@ -12,7 +12,7 @@ const STAGES = [
   'ADMIN_FINALIZED'
 ];
 
-export default function WorkflowModule({ onReadyToIssue, activeRequestId, setActiveRequestId }) {
+export default function WorkflowModule({ onReadyToIssue, activeRequestId, setActiveRequestId, onSwitchToAgents }) {
   const { API_BASE } = useNetwork();
   const [reqForm, setReqForm] = useState({
     requestId: 'REQ-2024-001',
@@ -89,36 +89,6 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
     } catch (err) {
       alert(`Network error: ${err.message}`);
     }
-  };
-
-  const autoAdvance = async () => {
-    if (!trackedRequest) {
-      alert('Please track or submit a request first.');
-      return;
-    }
-
-    const flow = [
-      { endpoint: 'faculty-approve', from: 'SUBMITTED', comments: 'Faculty credit audit complete' },
-      { endpoint: 'hod-approve', from: 'FACULTY_APPROVED', comments: 'HOD departmental clearance' },
-      { endpoint: 'dac-approve', from: 'HOD_APPROVED', comments: 'DAC compliance confirmed' },
-      { endpoint: 'exam-lock', from: 'DAC_APPROVED', comments: 'Exam grades locked' },
-      { endpoint: 'dean-approve', from: 'EXAM_LOCKED', comments: 'Dean academic sanction' },
-      { endpoint: 'admin-finalize', from: 'DEAN_APPROVED', comments: 'Administrative final clearance' }
-    ];
-
-    for (const step of flow) {
-      const res = await fetch(`${API_BASE}/requests/${trackedRequest.requestId}`);
-      const req = await res.json();
-      if (req.status === step.from) {
-        await fetch(`${API_BASE}/workflow/${step.endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId: trackedRequest.requestId, comments: step.comments })
-        });
-      }
-    }
-
-    await trackRequest(trackedRequest.requestId);
   };
 
   const currentIndex = trackedRequest ? STAGES.indexOf(trackedRequest.status) : -1;
@@ -218,9 +188,17 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
             <button type="button" className="btn-primary" onClick={() => trackRequest(activeRequestId)}>
               <Search size={14} /> Track
             </button>
-            <button type="button" className="btn-secondary" onClick={autoAdvance} title="Fast forward all 7 stages">
-              <FastForward size={14} /> Auto-Advance
-            </button>
+            {onSwitchToAgents && (
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={onSwitchToAgents}
+                style={{ background: 'linear-gradient(135deg, #10b981, #059669)', fontWeight: '600' }}
+                title="Execute via Autonomous Agentic AI Engine"
+              >
+                ⚡ 1-Click Agentic Pipeline
+              </button>
+            )}
           </div>
         </div>
 

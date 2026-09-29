@@ -8,6 +8,8 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     container_name: backend-api
+    env_file:
+      - ../backend/.env
     environment:
       - PORT=4000
       - IPFS_HOST=ipfs-node
@@ -15,8 +17,12 @@ services:
       - IPFS_GATEWAY_PORT=8080
       - CHANNEL_NAME=academicchannel
       - CHAINCODE_NAME=academic-contract
+      - HF_TOKEN=${HF_TOKEN:-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}
+      - HF_MODEL=${HF_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ../backend/src:/app/src
+      - ../backend/.env:/app/.env
     ports:
       - "4000:4000"
     networks:
@@ -30,6 +36,9 @@ services:
     container_name: frontend-portal
     environment:
       - PORT=3000
+    volumes:
+      - ../frontend/dist:/app/dist
+      - ../frontend/public:/app/public
     ports:
       - "3000:3000"
     networks:

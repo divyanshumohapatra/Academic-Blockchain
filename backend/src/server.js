@@ -1,5 +1,7 @@
 'use strict';
 
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -8,6 +10,10 @@ const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
 const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
+const orchestrator = require('./agents/orchestrator');
+const fraudAgent = require('./agents/fraudAgent');
+const chatAgent = require('./agents/chatAgent');
+const hfClient = require('./agents/hfAgentClient');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -416,9 +422,118 @@ app.get('/api/certificates', async (req, res) => {
   }
 });
 
+// ==========================================
+// 6. Autonomous Agentic AI Workflow & Orchestration
+// ==========================================
+
+// Master 1-Click Autonomous Multi-Agent Approval & Issuance Pipeline
+app.post('/api/agents/orchestrate', async (req, res) => {
+  try {
+    const { requestId, autoIssue, certId } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required for agentic orchestration' });
+    }
+
+    const result = await orchestrator.runAutonomousPipeline(requestId, { autoIssue, certId });
+    res.json(result);
+  } catch (err) {
+    console.error('Error running agentic pipeline:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Multi-Agent Pre-Flight Audit & Readiness Check
+app.get('/api/agents/audit/:requestId', async (req, res) => {
+  try {
+    const result = await orchestrator.auditRequest(req.params.requestId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Intelligent Fraud & Anomaly Scoring Scanner
+app.post('/api/agents/fraud-scan', async (req, res) => {
+  try {
+    const result = await fraudAgent.evaluateRisk(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Conversational AI Assistant & Ledger Oracle
+app.post('/api/agents/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'message is required' });
+    }
+
+    const response = await chatAgent.processMessage(message);
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Hugging Face AI Model & API Configuration
+app.get('/api/agents/config', (req, res) => {
+  const currentKey = hfClient.getApiKey();
+  res.json({
+    configured: Boolean(currentKey && currentKey.length > 5),
+    maskedKey: currentKey ? `${currentKey.substring(0, 6)}...${currentKey.slice(-4)}` : 'NOT_CONFIGURED',
+    model: hfClient.defaultModel,
+    provider: 'Hugging Face Serverless Inference API / Router'
+  });
+});
+
+app.post('/api/agents/config', (req, res) => {
+  const { hfToken, model } = req.body;
+  if (hfToken !== undefined) {
+    hfClient.setApiKey(hfToken);
+  }
+  if (model) {
+    hfClient.defaultModel = model;
+  }
+  res.json({
+    success: true,
+    message: 'Hugging Face AI Agent client configured successfully',
+    configured: Boolean(hfClient.getApiKey()),
+    model: hfClient.defaultModel
+  });
+});
+
+// Agent System & Diagnostic Telemetry
+app.get('/api/agents/health', async (req, res) => {
+  try {
+    const network = await checkNetworkHealth();
+    const ipfs = await checkIPFSHealth();
+    res.json({
+      status: 'UP',
+      agents: [
+        { name: 'FacultyAgent', org: 'Org1MSP', role: 'Coursework & Attendance Verification', status: 'ACTIVE' },
+        { name: 'HODAgent', org: 'Org1MSP', role: 'Departmental Credit & Curriculum Audit', status: 'ACTIVE' },
+        { name: 'DACAgent', org: 'Org1MSP', role: 'Academic Committee & Capstone Evaluation', status: 'ACTIVE' },
+        { name: 'ExamLockAgent', org: 'Org2MSP', role: 'Grade Lockdown & SHA-256 Merkle Digest', status: 'ACTIVE' },
+        { name: 'DeanAgent', org: 'Org3MSP', role: 'Institutional Compliance & Executive Sanction', status: 'ACTIVE' },
+        { name: 'AdminFinalizeAgent', org: 'Org3MSP', role: 'Clearance Verification & Authorization', status: 'ACTIVE' },
+        { name: 'FraudDetectionAgent', org: 'Consortium', role: '0-100 Anomaly & Invariant Risk Scoring', status: 'ACTIVE' },
+        { name: 'ChatbotAgent', org: 'Consortium', role: 'Natural Language Ledger Oracle', status: 'ACTIVE' },
+        { name: 'MasterOrchestrator', org: 'Consortium', role: 'Cross-Org 1-Click Pipeline Coordinator', status: 'ACTIVE' }
+      ],
+      network,
+      ipfs
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`=================================================`);
   console.log(`🎓 Academic Blockchain REST API running on port ${PORT}`);
   console.log(`Consortium: Org1 (Academic), Org2 (Exam), Org3 (Admin)`);
+  console.log(`🤖 Multi-Agent Autonomous AI Engine Loaded & Active`);
   console.log(`=================================================`);
 });

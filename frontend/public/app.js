@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initVerification();
   initRevocation();
   initLedgerExplorer();
+  initAgenticEngine();
+  initChatbot();
 
   setInterval(initNetworkHealth, 10000);
 });
@@ -589,3 +591,302 @@ async function loadCertificates() {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-hint">Error: ${err.message}</td></tr>`;
   }
 }
+
+// ==========================================
+// Autonomous Agentic AI Engine
+// ==========================================
+function initAgenticEngine() {
+  const loadLatestBtn = document.getElementById('loadLatestReqBtn');
+  const reqInput = document.getElementById('agentRequestId');
+  const preFlightBtn = document.getElementById('runPreFlightAuditBtn');
+  const fraudScanBtn = document.getElementById('runFraudScanBtn');
+  const form = document.getElementById('agentOrchestrateForm');
+  const terminal = document.getElementById('agentLogTerminal');
+  const statusBadge = document.getElementById('agentExecutionStatus');
+  const riskContainer = document.getElementById('riskGaugeContainer');
+  const riskBadge = document.getElementById('riskScoreBadge');
+  const riskFindings = document.getElementById('riskFindingsList');
+
+  // Load latest request
+  if (loadLatestBtn) {
+    loadLatestBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/requests`);
+        const reqs = await res.json();
+        if (Array.isArray(reqs) && reqs.length > 0) {
+          const latest = reqs[reqs.length - 1];
+          reqInput.value = latest.requestId;
+          appendTerminalLog(`[Orchestrator] Selected latest request: ${latest.requestId} (Status: ${latest.status})`);
+        } else {
+          alert('No requests found on ledger. Submit one in the Lifecycle tab first.');
+        }
+      } catch (e) {
+        alert(`Error: ${e.message}`);
+      }
+    });
+  }
+
+  // Pre-Flight Audit
+  if (preFlightBtn) {
+    preFlightBtn.addEventListener('click', async () => {
+      const requestId = reqInput.value.trim();
+      if (!requestId) {
+        alert('Please enter or select a Request ID');
+        return;
+      }
+
+      appendTerminalLog(`\n[🔍 Pre-Flight Audit Initiated] Auditing ${requestId}...`);
+      statusBadge.textContent = 'AUDITING';
+      statusBadge.style.background = '#4f46e5';
+
+      try {
+        const res = await fetch(`${API_BASE}/agents/audit/${requestId}`);
+        const data = await res.json();
+
+        if (res.ok) {
+          appendTerminalLog(`[Audit Complete] Current Stage: ${data.currentStatus}`);
+          appendTerminalLog(`  • Fraud Risk: ${data.fraudAssessment.riskScore}/100 (${data.fraudAssessment.riskLevel})`);
+          appendTerminalLog(`  • Recommendation: ${data.fraudAssessment.recommendation}`);
+
+          renderRiskGauge(data.fraudAssessment);
+          statusBadge.textContent = 'AUDITED';
+        } else {
+          appendTerminalLog(`❌ [Audit Error] ${data.error}`);
+          statusBadge.textContent = 'ERROR';
+        }
+      } catch (err) {
+        appendTerminalLog(`❌ [Network Error] ${err.message}`);
+      }
+    });
+  }
+
+  // Fraud & Anomaly Risk Scan
+  if (fraudScanBtn) {
+    fraudScanBtn.addEventListener('click', async () => {
+      const requestId = reqInput.value.trim();
+      if (!requestId) {
+        alert('Please enter or select a Request ID');
+        return;
+      }
+
+      appendTerminalLog(`\n[🛡️ Fraud Sentinel Scanner] Inspecting ${requestId}...`);
+      try {
+        const reqRes = await fetch(`${API_BASE}/requests/${requestId}`);
+        const reqData = await reqRes.json();
+
+        const scanRes = await fetch(`${API_BASE}/agents/fraud-scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reqData)
+        });
+        const scanData = await scanRes.json();
+
+        renderRiskGauge(scanData);
+        appendTerminalLog(`[Fraud Scan Result] Score: ${scanData.riskScore}/100, Tier: ${scanData.riskLevel}`);
+        if (scanData.findings && scanData.findings.length > 0) {
+          scanData.findings.forEach(f => {
+            appendTerminalLog(`  ⚠️ [${f.severity}] ${f.type}: ${f.detail}`);
+          });
+        } else {
+          appendTerminalLog(`  ✅ Zero anomalies or velocity collisions detected.`);
+        }
+      } catch (err) {
+        appendTerminalLog(`❌ [Fraud Scan Error] ${err.message}`);
+      }
+    });
+  }
+
+  // 1-Click Multi-Agent Pipeline
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const requestId = reqInput.value.trim();
+      if (!requestId) return;
+
+      terminal.innerHTML = '';
+      appendTerminalLog(`======================================================`);
+      appendTerminalLog(`⚡ [1-Click Autonomous Multi-Agent Pipeline Triggered]`);
+      appendTerminalLog(`Target Request: ${requestId}`);
+      appendTerminalLog(`Consortium: Org 1 (Academic), Org 2 (Exam), Org 3 (Admin)`);
+      appendTerminalLog(`======================================================`);
+
+      statusBadge.textContent = 'RUNNING';
+      statusBadge.style.background = '#f59e0b';
+
+      try {
+        const res = await fetch(`${API_BASE}/agents/orchestrate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId, autoIssue: true })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          if (data.executionLogs) {
+            data.executionLogs.forEach(log => {
+              const agentTag = log.agent ? `[${log.agent}]` : `[${log.step}]`;
+              appendTerminalLog(`\n${agentTag} Step: ${log.step}`);
+              if (log.confidence) appendTerminalLog(`  • Confidence: ${(log.confidence * 100).toFixed(1)}%`);
+              if (log.rationale) appendTerminalLog(`  • Rationale: ${log.rationale}`);
+              if (log.gradesHash) appendTerminalLog(`  • Merkle Digest: ${log.gradesHash}`);
+              if (log.issuanceResult) {
+                appendTerminalLog(`  🎉 Certificate Minted: ${log.issuanceResult.certId}`);
+                appendTerminalLog(`  • IPFS CID: ${log.issuanceResult.ipfsCid}`);
+                appendTerminalLog(`  • SHA-256 Digest: ${log.issuanceResult.sha256Hash}`);
+              }
+            });
+          }
+
+          statusBadge.textContent = 'SUCCESS (ISSUED)';
+          statusBadge.style.background = '#10b981';
+          appendTerminalLog(`\n✅ [Pipeline Complete in ${data.durationMs}ms] Certificate successfully issued and anchored on Fabric & IPFS!`);
+        } else {
+          statusBadge.textContent = 'HALTED / FAILED';
+          statusBadge.style.background = '#ef4444';
+          appendTerminalLog(`\n❌ [Pipeline Halted] ${data.error || data.message || 'Execution error'}`);
+          if (data.executionLogs) {
+            data.executionLogs.forEach(log => {
+              appendTerminalLog(`  [${log.agent || log.step}] ${log.rationale || log.status || ''}`);
+            });
+          }
+        }
+      } catch (err) {
+        statusBadge.textContent = 'ERROR';
+        statusBadge.style.background = '#ef4444';
+        appendTerminalLog(`\n❌ [Connection Error] ${err.message}`);
+      }
+    });
+  }
+
+  function appendTerminalLog(msg) {
+    if (!terminal) return;
+    const p = document.createElement('p');
+    p.style.margin = '3px 0';
+    p.textContent = msg;
+    terminal.appendChild(p);
+    terminal.scrollTop = terminal.scrollHeight;
+  }
+
+  function renderRiskGauge(fraudData) {
+    if (!riskContainer || !riskBadge) return;
+    riskContainer.style.display = 'block';
+    const score = fraudData.riskScore || 0;
+    const level = fraudData.riskLevel || 'LOW';
+
+    riskBadge.textContent = `${score} / 100 (${level})`;
+    if (score < 25) {
+      riskBadge.style.background = '#22c55e';
+    } else if (score < 60) {
+      riskBadge.style.background = '#f59e0b';
+    } else {
+      riskBadge.style.background = '#ef4444';
+    }
+
+    if (riskFindings) {
+      if (!fraudData.findings || fraudData.findings.length === 0) {
+        riskFindings.innerHTML = '<span style="color:#22c55e;">✅ All safety invariants and transcript checks passed.</span>';
+      } else {
+        riskFindings.innerHTML = fraudData.findings.map(f =>
+          `<div>• <strong>[${f.severity}]</strong> ${f.detail}</div>`
+        ).join('');
+      }
+    }
+  }
+}
+
+// ==========================================
+// Conversational AI Assistant (Chatbot Widget)
+// ==========================================
+function initChatbot() {
+  const toggleBtn = document.getElementById('chatbotToggleBtn');
+  const closeBtn = document.getElementById('chatbotCloseBtn');
+  const modal = document.getElementById('chatbotModal');
+  const form = document.getElementById('chatbotForm');
+  const input = document.getElementById('chatbotInput');
+  const messages = document.getElementById('chatbotMessages');
+  const quickChips = document.querySelectorAll('.chip-btn');
+
+  if (toggleBtn && modal) {
+    toggleBtn.addEventListener('click', () => {
+      modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+      if (modal.style.display === 'flex') input.focus();
+    });
+  }
+
+  if (closeBtn && modal) {
+    closeBtn.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+  }
+
+  quickChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const query = chip.dataset.query;
+      if (query) {
+        sendChatbotQuery(query);
+      }
+    });
+  });
+
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      sendChatbotQuery(text);
+    });
+  }
+
+  async function sendChatbotQuery(text) {
+    appendUserMsg(text);
+    const typingIndicator = appendBotMsg('⏳ _Querying Hyperledger Fabric ledger & agents..._');
+
+    try {
+      const res = await fetch(`${API_BASE}/agents/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      const data = await res.json();
+
+      typingIndicator.remove();
+      if (res.ok) {
+        appendBotMsg(formatMarkdownText(data.reply));
+      } else {
+        appendBotMsg(`⚠️ Error: ${data.error}`);
+      }
+    } catch (err) {
+      typingIndicator.remove();
+      appendBotMsg(`❌ Connection error: ${err.message}`);
+    }
+  }
+
+  function appendUserMsg(text) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg user-msg';
+    div.textContent = text;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function appendBotMsg(html) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg bot-msg';
+    div.innerHTML = html;
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    return div;
+  }
+
+  function formatMarkdownText(md) {
+    if (!md) return '';
+    return md
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/• /g, '• ');
+  }
+}
+
