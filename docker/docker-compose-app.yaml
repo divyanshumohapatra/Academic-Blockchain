@@ -40,7 +40,7 @@ services:
       - ../frontend/dist:/app/dist
       - ../frontend/public:/app/public
     ports:
-      - "3000:3000"
+      - "3001:3000"
     networks:
       - academic-net
     depends_on:
