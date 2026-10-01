@@ -171,8 +171,28 @@ async function checkNetworkHealth() {
   }
 }
 
+/**
+ * Org 1 Dedicated Transaction Invocation
+ * Explicitly signs and submits transaction proposal with Org1MSP identity targeting peer0.org1.academic.edu:7051
+ */
+async function invokeOrg1Transaction(functionName, args = []) {
+  console.log(`[Org1 Fabric Gateway] Submitting transaction '${functionName}' under Org1MSP identity via peer0.org1.academic.edu:7051...`);
+  return await invokeChaincode(functionName, args, 1);
+}
+
+/**
+ * Org 1 Dedicated Ledger Query
+ * Queries ledger state directly via peer0.org1.academic.edu:7051 using Org1MSP identity
+ */
+async function queryOrg1Ledger(functionName, args = []) {
+  return await queryChaincode(functionName, args, 1);
+}
+
 module.exports = {
   invokeChaincode,
   queryChaincode,
-  checkNetworkHealth
+  checkNetworkHealth,
+  invokeOrg1Transaction,
+  queryOrg1Ledger
 };
+

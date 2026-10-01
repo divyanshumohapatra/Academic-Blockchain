@@ -9,11 +9,15 @@ const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
-const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
+const { invokeChaincode, queryChaincode, checkNetworkHealth, invokeOrg1Transaction, queryOrg1Ledger } = require('./fabric');
 const orchestrator = require('./agents/orchestrator');
 const fraudAgent = require('./agents/fraudAgent');
 const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
+const { Org1AcademicAgent } = require('./agents/orgAgents');
+
+const org1AcademicAgent = new Org1AcademicAgent();
+
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -452,6 +456,53 @@ app.get('/api/agents/audit/:requestId', async (req, res) => {
   }
 });
 
+// ==========================================
+// 6.1 Org 1 Autonomous Academic Department Agent Routes
+// Contributor 1.3: Org 1 Academic Agent Lead
+// ==========================================
+
+// POST /api/agents/org1/audit/:requestId
+// Evaluates attendance (>=75%), CIE marks (>=20/50), prerequisites, credits, and DAC capstone rubric
+app.post('/api/agents/org1/audit/:requestId', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const auditReport = await org1AcademicAgent.auditRequest(requestId, req.body || {});
+    res.json(auditReport);
+  } catch (err) {
+    console.error(`[Org1 Agent] Error auditing request ${req.params.requestId}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/agents/org1/audit/:requestId (Convenience alias)
+app.get('/api/agents/org1/audit/:requestId', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const auditReport = await org1AcademicAgent.auditRequest(requestId, {});
+    res.json(auditReport);
+  } catch (err) {
+    console.error(`[Org1 Agent] Error auditing request ${req.params.requestId}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/agents/org1/auto-approve/:requestId
+// Runs the autonomous audit and, if passed, sequentially submits on-chain approvals for Faculty, HOD, and DAC via Org1MSP
+app.post('/api/agents/org1/auto-approve/:requestId', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const result = await org1AcademicAgent.autoApprove(requestId, req.body || {});
+    if (!result.success) {
+      return res.status(422).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    console.error(`[Org1 Agent] Error in auto-approval for ${req.params.requestId}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // Intelligent Fraud & Anomaly Scoring Scanner
 app.post('/api/agents/fraud-scan', async (req, res) => {
   try {
@@ -512,6 +563,7 @@ app.get('/api/agents/health', async (req, res) => {
     res.json({
       status: 'UP',
       agents: [
+        { name: 'Org1AcademicAgent', org: 'Org1MSP', role: 'Autonomous Academic Department Lead & Stages 1-3 Coordinator', status: 'ACTIVE' },
         { name: 'FacultyAgent', org: 'Org1MSP', role: 'Coursework & Attendance Verification', status: 'ACTIVE' },
         { name: 'HODAgent', org: 'Org1MSP', role: 'Departmental Credit & Curriculum Audit', status: 'ACTIVE' },
         { name: 'DACAgent', org: 'Org1MSP', role: 'Academic Committee & Capstone Evaluation', status: 'ACTIVE' },

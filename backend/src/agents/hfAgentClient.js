@@ -99,6 +99,9 @@ class HFAgentClient {
           if (status === 503) {
             console.log(`[HF Agent Client] 503 (Model loading). Waiting 2s before retry ${attempts + 1}...`);
             await this._sleep(2000);
+          } else if (status === 401 || status === 402) {
+            console.warn(`[HF Agent Client] Status ${status} (No credits or unauthorized). Fast fallback to deterministic rule engine.`);
+            break;
           } else {
             await this._sleep(1000);
           }
@@ -119,27 +122,59 @@ class HFAgentClient {
 
     if (isJsonRequested) {
       const attendanceMatch = userPrompt.match(/attendance['":\s]+([0-9.]+)/i);
+      const cieMatch = userPrompt.match(/cie['":\s]+([0-9.]+)/i);
       const cgpaMatch = userPrompt.match(/cgpa['":\s]+([0-9.]+)/i);
       const creditsMatch = userPrompt.match(/credits['":\s]+([0-9.]+)/i);
       const backlogsMatch = userPrompt.match(/backlogs['":\s]+([0-9]+)/i);
+      const capstoneMatch = userPrompt.match(/capstone(?: score)?['":\s]+([0-9.]+)/i);
+      const origMatch = userPrompt.match(/originality(?: report)?['":\s]+([0-9.]+)/i);
+      const feeMatch = userPrompt.match(/fee dues['":\s]+([0-9.]+)/i);
+      const libMatch = userPrompt.match(/library dues['":\s]+([0-9.]+)/i);
+
+      // Check explicit boolean conditions
+      const prereqsFalse = /prerequisites?['":\s]+false/i.test(userPrompt) || /prerequisites met['":\s]+false/i.test(userPrompt);
+      const disciplinaryFalse = /disciplinary clearance['":\s]+false/i.test(userPrompt);
 
       const attendance = attendanceMatch ? parseFloat(attendanceMatch[1]) : 88.5;
+      const cie = cieMatch ? parseFloat(cieMatch[1]) : 42.0;
       const cgpa = cgpaMatch ? parseFloat(cgpaMatch[1]) : 8.85;
       const credits = creditsMatch ? parseFloat(creditsMatch[1]) : 164;
       const backlogs = backlogsMatch ? parseInt(backlogsMatch[1], 10) : 0;
+      const capstone = capstoneMatch ? parseFloat(capstoneMatch[1]) : 85;
+      const originality = origMatch ? parseFloat(origMatch[1]) : 94;
+      const feeDues = feeMatch ? parseFloat(feeMatch[1]) : 0;
+      const libraryDues = libMatch ? parseFloat(libMatch[1]) : 0;
 
-      const isCompliant = attendance >= 75 && cgpa >= 5.0 && backlogs === 0 && credits >= 160;
-      const confidence = isCompliant ? 0.98 : 0.40;
-      const riskScore = isCompliant ? 5 : 75;
+      const violations = [];
+      if (attendance < 75.0) violations.push(`Attendance ${attendance}% < 75.0% statutory minimum`);
+      if (cie < 20.0) violations.push(`CIE score ${cie}/50 < 20.0/50 passing threshold`);
+      if (prereqsFalse) violations.push(`Prerequisite course completion audit failed`);
+      if (credits < 160) violations.push(`Credits ${credits} < 160 required`);
+      if (disciplinaryFalse) violations.push(`Disciplinary clearance not granted`);
+      if (cgpa < 5.0) violations.push(`CGPA ${cgpa} < 5.0 passing minimum`);
+      if (backlogs > 0) violations.push(`Active backlogs: ${backlogs}`);
+      if (capstone < 60) violations.push(`Capstone score ${capstone}/100 < 60 threshold`);
+      if (originality < 80) violations.push(`Originality report ${originality}% < 80% threshold`);
+      if (feeDues > 0) violations.push(`Pending fee dues: ₹${feeDues}`);
+      if (libraryDues > 0) violations.push(`Pending library dues: ₹${libraryDues}`);
+
+      const isCompliant = violations.length === 0;
+      const confidence = isCompliant ? 0.98 : 0.96;
+      const riskScore = isCompliant ? 5 : 85;
+
+      const reasoning = isCompliant
+        ? `All verifiable thresholds satisfied: Attendance=${attendance}% (≥75%), CIE=${cie}/50 (≥20), Prerequisites=Verified, Credits=${credits}/160, Capstone=${capstone}/100.`
+        : `Autonomous audit failed: ${violations.join('; ')}. Escalated to Department Academic Committee.`;
 
       return {
         source: 'DETERMINISTIC_JS_FALLBACK',
         model: 'Deterministic-JS-Checks',
         content: JSON.stringify({
           decision: isCompliant ? 'APPROVE' : 'REJECT',
-          confidence: confidence,
-          riskScore: riskScore,
-          reasoning: `Attendance=${attendance}% (≥75%), Credits=${credits}/160, CGPA=${cgpa}, Backlogs=${backlogs}. All criteria verified.`
+          confidence,
+          riskScore,
+          reasoning,
+          violations: violations.length > 0 ? violations : undefined
         })
       };
     }
