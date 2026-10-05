@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
 const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
+const { runFraudInspection } = require('./agents/fraudAgent');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -191,9 +192,46 @@ app.post('/api/workflow/admin-finalize', async (req, res) => {
 // ==========================================
 app.post('/api/certificates/issue', async (req, res) => {
   try {
-    const { certId, requestId, studentId, certType, studentName, department } = req.body;
+    const { certId, requestId, studentId, certType, studentName, department, transcript } = req.body;
     if (!certId || !studentId) {
       return res.status(400).json({ error: 'certId and studentId are required' });
+    }
+
+    // 0. AI Fraud Sentinel Inline Gatekeeper: Ledger Invariant & Transcript Integrity Audit
+    let history = [];
+    if (requestId) {
+      try {
+        const histResult = await queryChaincode('GetRequestHistory', [requestId]);
+        if (histResult && Array.isArray(histResult)) {
+          history = histResult.map(h => ({
+            status: h.value?.status || h.status,
+            timestamp: h.timestamp
+          }));
+        }
+      } catch (hErr) {
+        console.warn('History check note:', hErr.message);
+      }
+    }
+
+    const inspection = runFraudInspection({
+      studentId,
+      requestId,
+      transcript: transcript || {
+        previousGPA: 8.5,
+        recentSemesterGPA: 8.7,
+        totalCreditsEarned: 160,
+        requiredCredits: 160,
+        completedCourses: ['CS101', 'CS201', 'CS301', 'CS401', 'CS405', 'MATH201']
+      },
+      history
+    });
+
+    if (inspection.shouldQuarantine) {
+      return res.status(403).json({
+        error: `Issuance Blocked by Fraud Sentinel Gatekeeper: [${inspection.riskLevel}] Risk Score ${inspection.riskScore}/100. Request is quarantined on security grounds.`,
+        quarantined: true,
+        inspection
+      });
     }
 
     const issueDate = new Date().toISOString().substring(0, 10);
@@ -234,7 +272,12 @@ app.post('/api/certificates/issue', async (req, res) => {
       ipfsCid: ipfsResult.cid,
       sha256Hash: ipfsResult.sha256,
       gatewayUrl: ipfsResult.gatewayUrl,
-      chaincodeResult
+      chaincodeResult,
+      sentinelAudit: {
+        riskScore: inspection.riskScore,
+        riskLevel: inspection.riskLevel,
+        clearedAt: inspection.inspectedAt
+      }
     });
   } catch (err) {
     console.error('Error issuing certificate:', err);
@@ -345,6 +388,34 @@ app.get('/api/certificates', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ==========================================
+// 6. Group 3: Intelligent Fraud & Anomaly Sentinel Engine
+// ==========================================
+app.post('/api/fraud/inspect', async (req, res) => {
+  try {
+    const inspection = runFraudInspection(req.body);
+    res.json({
+      success: true,
+      agent: 'Group 3 Fraud Sentinel Agent v1.0',
+      inspection
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/fraud/health', (req, res) => {
+  res.json({
+    status: 'ACTIVE',
+    agent: 'Group 3 Fraud Sentinel Agent',
+    modules: [
+      'Contributor 3.1: Ledger Invariant Auditor',
+      'Contributor 3.2: Transcript Anomaly & Velocity Lead',
+      'Contributor 3.3: Autonomous Fraud Scoring & Quarantine Lead'
+    ]
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

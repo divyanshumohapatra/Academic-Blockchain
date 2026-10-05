@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const NetworkContext = createContext(null);
-export const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
+export const API_BASE = '/api';
 
 export const NetworkProvider = ({ children }) => {
   const [health, setHealth] = useState({

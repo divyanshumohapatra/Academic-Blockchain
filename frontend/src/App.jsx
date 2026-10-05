@@ -7,13 +7,15 @@ import IssuanceModule from './components/IssuanceModule';
 import EmployerPortal from './components/EmployerPortal';
 import RevocationModule from './components/RevocationModule';
 import LedgerExplorer from './components/LedgerExplorer';
-import { 
-  ClipboardList, 
-  UserCheck, 
-  Search, 
-  ShieldAlert, 
+import FraudSentinelModule from './components/FraudSentinelModule';
+import {
+  ClipboardList,
+  UserCheck,
+  Search,
+  ShieldAlert,
   Database,
-  Building2
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function App() {
@@ -42,7 +44,7 @@ export default function App() {
 
             {/* Consortium Navigation Tabs */}
             <nav className="tabs-nav">
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'workflow' ? 'active' : ''}`}
                 onClick={() => setActiveTab('workflow')}
               >
@@ -50,7 +52,7 @@ export default function App() {
                 Lifecycle & Workflow
               </button>
 
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'students' ? 'active' : ''}`}
                 onClick={() => setActiveTab('students')}
               >
@@ -58,7 +60,7 @@ export default function App() {
                 Student Registration
               </button>
 
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'verify' ? 'active' : ''}`}
                 onClick={() => setCurrentView('employer')}
               >
@@ -66,7 +68,7 @@ export default function App() {
                 Verification Portal
               </button>
 
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'revoke' ? 'active' : ''}`}
                 onClick={() => setActiveTab('revoke')}
               >
@@ -74,24 +76,36 @@ export default function App() {
                 Revocation
               </button>
 
-              <button 
+              <button
                 className={`tab-btn ${activeTab === 'ledger' ? 'active' : ''}`}
                 onClick={() => setActiveTab('ledger')}
               >
                 <Database size={16} />
                 Ledger Explorer
               </button>
+
+              <button
+                className={`tab-btn ${activeTab === 'fraud' ? 'active' : ''}`}
+                onClick={() => setActiveTab('fraud')}
+                style={{
+                  color: activeTab === 'fraud' ? '#38bdf8' : '#e2e8f0',
+                  fontWeight: 700
+                }}
+              >
+                <ShieldCheck size={16} color="#38bdf8" />
+                Fraud Sentinel (Group 3)
+              </button>
             </nav>
 
             {/* Tab Contents */}
             {activeTab === 'workflow' && (
               <>
-                <WorkflowModule 
+                <WorkflowModule
                   activeRequestId={activeRequestId}
                   setActiveRequestId={setActiveRequestId}
                   onReadyToIssue={(req) => setReadyRequest(req)}
                 />
-                <IssuanceModule 
+                <IssuanceModule
                   trackedRequest={readyRequest}
                   onCertificateIssued={() => setActiveTab('ledger')}
                 />
@@ -105,6 +119,8 @@ export default function App() {
             )}
 
             {activeTab === 'ledger' && <LedgerExplorer />}
+
+            {activeTab === 'fraud' && <FraudSentinelModule />}
           </>
         )}
       </main>

@@ -15,17 +15,43 @@ const STAGES = [
 export default function WorkflowModule({ onReadyToIssue, activeRequestId, setActiveRequestId }) {
   const { API_BASE } = useNetwork();
   const [reqForm, setReqForm] = useState({
-    requestId: 'REQ-2024-001',
-    studentId: 'STU-2024-001',
+    requestId: `REQ-2024-${Math.floor(1000 + Math.random() * 9000)}`,
+    studentId: 'STU-2024-031',
     certType: 'Bachelor of Technology in CSE'
   });
+  const [registeredStudents, setRegisteredStudents] = useState([]);
   const [trackedRequest, setTrackedRequest] = useState(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
+  useEffect(() => {
+    fetch(`${API_BASE}/students`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setRegisteredStudents(data);
+          // Set to first student if currently blank or not registered
+          setReqForm(prev => ({
+            ...prev,
+            studentId: prev.studentId && data.some(s => s.studentId === prev.studentId) ? prev.studentId : data[0].studentId
+          }));
+        }
+      })
+      .catch(err => console.warn('Could not fetch registered students:', err.message));
+  }, [API_BASE]);
+
   const generateRandomReqId = () => {
     const rand = Math.floor(1000 + Math.random() * 9000);
     setReqForm((prev) => ({ ...prev, requestId: `REQ-2024-${rand}` }));
+  };
+
+  const parseChaincodeError = (raw) => {
+    if (!raw) return 'Unknown error occurred.';
+    const msgMatch = raw.match(/message:\s*"([^"]+)"/);
+    if (msgMatch && msgMatch[1]) return msgMatch[1];
+    const statusMatch = raw.match(/status:500\s+message:(.*)/);
+    if (statusMatch && statusMatch[1]) return statusMatch[1].trim();
+    return raw;
   };
 
   const submitRequest = async (e) => {
@@ -44,7 +70,8 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
         setActiveRequestId(reqForm.requestId);
         trackRequest(reqForm.requestId);
       } else {
-        setFeedback({ type: 'error', message: `❌ Submission failed: ${data.error}` });
+        const cleanMsg = parseChaincodeError(data.error);
+        setFeedback({ type: 'error', message: `❌ Submission rejected: ${cleanMsg}` });
       }
     } catch (err) {
       setFeedback({ type: 'error', message: `❌ Network error: ${err.message}` });
@@ -165,14 +192,52 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
 
           <div className="form-group">
             <label htmlFor="reqStudentId">Registered Student ID:</label>
-            <input 
-              type="text" 
-              id="reqStudentId"
-              required 
-              placeholder="e.g. STU-2024-001"
-              value={reqForm.studentId}
-              onChange={(e) => setReqForm({ ...reqForm, studentId: e.target.value })}
-            />
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+              <input 
+                type="text" 
+                id="reqStudentId"
+                required 
+                placeholder="e.g. STU-2024-031"
+                value={reqForm.studentId}
+                onChange={(e) => setReqForm({ ...reqForm, studentId: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              {registeredStudents.length > 0 && (
+                <select
+                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: '6px', padding: '0 8px', fontSize: '0.8rem' }}
+                  value={reqForm.studentId}
+                  onChange={(e) => setReqForm({ ...reqForm, studentId: e.target.value })}
+                >
+                  <option value="">Select registered...</option>
+                  {registeredStudents.map(s => (
+                    <option key={s.studentId} value={s.studentId}>{s.studentId} ({s.name})</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {registeredStudents.length > 0 && (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Quick Select:</span>
+                {registeredStudents.map(s => (
+                  <button
+                    key={s.studentId}
+                    type="button"
+                    onClick={() => setReqForm(prev => ({ ...prev, studentId: s.studentId }))}
+                    style={{
+                      background: reqForm.studentId === s.studentId ? '#0284c7' : '#1e293b',
+                      color: '#f8fafc',
+                      border: '1px solid #334155',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {s.studentId} ({s.name})
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="form-group">
@@ -279,8 +344,8 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
                 </button>
               )}
               {trackedRequest.status === 'ADMIN_FINALIZED' && (
-                <p style={{ color: '#34d399', fontWeight: 600 }}>
-                  🎉 Request is ADMIN_FINALIZED! Proceed to Module 3 below to issue & anchor on ledger.
+                <p style={{ color: '#38bdf8', fontWeight: 600 }}>
+                  🛡️ Request reached ADMIN_FINALIZED. The AI Fraud Sentinel Gatekeeper below is auditing the record before blockchain issuance.
                 </p>
               )}
               {trackedRequest.status === 'CERTIFICATE_ISSUED' && (

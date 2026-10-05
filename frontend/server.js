@@ -23,9 +23,29 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+const BACKEND_URL = process.env.BACKEND_URL || 'http://backend-api:4000';
+
 const server = http.createServer((req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   let pathname = urlObj.pathname;
+
+  // Proxy /api calls to backend container
+  if (pathname.startsWith('/api')) {
+    const targetUrl = new URL(req.url, BACKEND_URL);
+    const proxyReq = http.request(targetUrl, {
+      method: req.method,
+      headers: { ...req.headers, host: targetUrl.host }
+    }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (err) => {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Backend unreachable', details: err.message }));
+    });
+    req.pipe(proxyReq);
+    return;
+  }
 
   if (pathname === '/' || pathname === '') {
     pathname = '/index.html';
