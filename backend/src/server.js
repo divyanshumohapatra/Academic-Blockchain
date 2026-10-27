@@ -14,6 +14,7 @@ const orchestrator = require('./agents/orchestrator');
 const fraudAgent = require('./agents/fraudAgent');
 const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
+const sisDatabase = require('./db/sisDatabase');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -51,17 +52,36 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ==========================================
-// 2. Module 1: Student Registration
+// 2. Module 1: Student Registration (Verified against University SIS Database)
 // ==========================================
 app.post('/api/students', async (req, res) => {
   try {
     const { studentId, name, email, department, enrollmentYear } = req.body;
-    if (!studentId || !name || !email) {
-      return res.status(400).json({ error: 'studentId, name, and email are required' });
+    if (!studentId) {
+      return res.status(400).json({ error: 'studentId (roll number) is required' });
     }
 
-    const result = await invokeChaincode('RegisterStudent', [studentId, name, email, department || 'Computer Science', enrollmentYear || '2024'], 1);
-    res.status(201).json({ success: true, result });
+    // 1. Verify that student exists in University SIS Database
+    const sisRecord = sisDatabase.getStudentByRollNumber(studentId);
+    if (!sisRecord) {
+      return res.status(400).json({
+        error: `Verification failed: Roll number "${studentId}" is not enrolled in the University Student Information System (SIS). Only enrolled students can be registered on the blockchain.`
+      });
+    }
+
+    // 2. Use official SIS data as authoritative fallback if user input omitted
+    const verifiedName = name || sisRecord.name;
+    const verifiedEmail = email || sisRecord.email;
+    const verifiedDept = department || sisRecord.department;
+    const verifiedYear = enrollmentYear || sisRecord.enrollmentYear;
+
+    const result = await invokeChaincode('RegisterStudent', [studentId, verifiedName, verifiedEmail, verifiedDept, verifiedYear], 1);
+    res.status(201).json({
+      success: true,
+      result,
+      sisProfile: sisRecord,
+      message: `Student ${studentId} successfully verified against University SIS Database and registered on Blockchain.`
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -80,6 +100,41 @@ app.get('/api/students', async (req, res) => {
   try {
     const students = await queryChaincode('GetAllStudents', []);
     res.json(students || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// University SIS Database Endpoints
+app.get('/api/sis/students', (req, res) => {
+  try {
+    const students = sisDatabase.getAllSISStudents();
+    res.json(students);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/sis/students/:id', (req, res) => {
+  try {
+    const student = sisDatabase.getStudentByRollNumber(req.params.id);
+    if (!student) {
+      return res.status(404).json({ error: `Student ${req.params.id} not found in University SIS Database` });
+    }
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sis/students', (req, res) => {
+  try {
+    const studentData = req.body;
+    if (!studentData || (!studentData.studentId && !studentData.student_id)) {
+      return res.status(400).json({ error: 'studentId is required to enroll in SIS' });
+    }
+    const saved = sisDatabase.addOrUpdateStudent(studentData);
+    res.status(201).json({ success: true, student: saved });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -104,19 +159,28 @@ app.post('/api/requests', async (req, res) => {
       }
     }
 
-    // Auto-enrich details with registered student data if missing
-    try {
-      const studentBytes = await queryChaincode('GetStudent', [studentId]);
-      if (studentBytes) {
-        const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
-        if (studentObj) {
-          requestDetails.name = requestDetails.name || studentObj.name;
-          requestDetails.department = requestDetails.department || studentObj.department;
-          requestDetails.email = requestDetails.email || studentObj.email;
+    // Auto-enrich details from authoritative University SIS database
+    const sisRecord = sisDatabase.getStudentByRollNumber(studentId);
+    if (sisRecord) {
+      requestDetails = {
+        ...sisRecord,
+        ...requestDetails // User-provided details take precedence if testing specific scenarios
+      };
+    } else {
+      // Fallback: lookup student data on ledger
+      try {
+        const studentBytes = await queryChaincode('GetStudent', [studentId]);
+        if (studentBytes) {
+          const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+          if (studentObj) {
+            requestDetails.name = requestDetails.name || studentObj.name;
+            requestDetails.department = requestDetails.department || studentObj.department;
+            requestDetails.email = requestDetails.email || studentObj.email;
+          }
         }
+      } catch (e) {
+        console.warn(`[Request Creation] Student lookup note: ${e.message}`);
       }
-    } catch (e) {
-      console.warn(`[Request Creation] Student lookup note: ${e.message}`);
     }
 
     const result = await invokeChaincode('RequestCertificate', [
@@ -126,7 +190,7 @@ app.post('/api/requests', async (req, res) => {
       JSON.stringify(requestDetails)
     ], 1);
 
-    res.status(201).json({ success: true, result });
+    res.status(201).json({ success: true, result, enrichedFromSIS: Boolean(sisRecord) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -477,29 +541,18 @@ app.post('/api/agents/chat', async (req, res) => {
   }
 });
 
-// Hugging Face AI Model & API Configuration
+// Multi-Provider AI Model Configuration (Loaded exclusively from .env)
 app.get('/api/agents/config', (req, res) => {
-  const currentKey = hfClient.getApiKey();
-  res.json({
-    configured: Boolean(currentKey && currentKey.length > 5),
-    maskedKey: currentKey ? `${currentKey.substring(0, 6)}...${currentKey.slice(-4)}` : 'NOT_CONFIGURED',
-    model: hfClient.defaultModel,
-    provider: 'Hugging Face Serverless Inference API / Router'
-  });
-});
+  const groqKey = hfClient.getGroqKey();
+  const hfKey = hfClient.getApiKey();
+  const provider = hfClient.getActiveProvider();
 
-app.post('/api/agents/config', (req, res) => {
-  const { hfToken, model } = req.body;
-  if (hfToken !== undefined) {
-    hfClient.setApiKey(hfToken);
-  }
-  if (model) {
-    hfClient.defaultModel = model;
-  }
   res.json({
-    success: true,
-    message: 'Hugging Face AI Agent client configured successfully',
-    configured: Boolean(hfClient.getApiKey()),
+    provider,
+    groqConfigured: Boolean(groqKey && groqKey.length > 5),
+    groqMaskedKey: groqKey ? `${groqKey.substring(0, 7)}...${groqKey.slice(-4)}` : 'NOT_CONFIGURED',
+    hfConfigured: Boolean(hfKey && hfKey.length > 5),
+    hfMaskedKey: hfKey ? `${hfKey.substring(0, 6)}...${hfKey.slice(-4)}` : 'NOT_CONFIGURED',
     model: hfClient.defaultModel
   });
 });

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNetwork } from '../context/NetworkContext';
-import { UserPlus, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { UserPlus, RefreshCw, CheckCircle, AlertCircle, Database, ArrowRight } from 'lucide-react';
 
 export default function StudentModule() {
   const { API_BASE } = useNetwork();
   const [students, setStudents] = useState([]);
+  const [sisStudents, setSisStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     studentId: '',
@@ -18,9 +19,14 @@ export default function StudentModule() {
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/students`);
-      const data = await res.json();
-      setStudents(Array.isArray(data) ? data : []);
+      const [ledgerRes, sisRes] = await Promise.all([
+        fetch(`${API_BASE}/students`),
+        fetch(`${API_BASE}/sis/students`)
+      ]);
+      const ledgerData = await ledgerRes.json();
+      const sisData = await sisRes.json();
+      setStudents(Array.isArray(ledgerData) ? ledgerData : []);
+      setSisStudents(Array.isArray(sisData) ? sisData : []);
     } catch (err) {
       console.error('Error fetching students:', err);
     } finally {
@@ -148,7 +154,7 @@ export default function StudentModule() {
 
       <div className="card">
         <div className="card-title">
-          <h3>Registered Students Registry</h3>
+          <h3>Registered on Ledger (Fabric)</h3>
           <button className="btn-secondary btn-sm" onClick={fetchStudents}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -181,6 +187,107 @@ export default function StudentModule() {
                     <td>{s.enrollmentYear}</td>
                   </tr>
                 ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* University SIS Database Reference Card */}
+      <div className="card full-width-card" style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
+        <div className="card-title">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Database size={18} style={{ color: '#38bdf8' }} />
+            <h3>Authoritative University SIS Database (SQLite: <code>university_sis.db</code>)</h3>
+          </div>
+          <span className="step-num" style={{ background: 'rgba(56,189,248,0.2)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.4)' }}>
+            Authoritative SIS Records
+          </span>
+        </div>
+        <p className="subtitle" style={{ marginBottom: '1rem' }}>
+          Official academic records stored in the University ERP/SIS database. Only students enrolled here can register on the blockchain. When a certificate is requested, these marks and clearance metrics are automatically verified by the autonomous AI agents.
+        </p>
+
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Roll No</th>
+                <th>Student Name</th>
+                <th>Department</th>
+                <th>Attendance</th>
+                <th>CIE Score</th>
+                <th>CGPA</th>
+                <th>Backlogs</th>
+                <th>Capstone</th>
+                <th>Dues</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sisStudents.length === 0 ? (
+                <tr><td colSpan="10" className="empty-hint">Loading SIS database records...</td></tr>
+              ) : (
+                sisStudents.map((sis) => {
+                  const isEligible = sis.attendance >= 75 && sis.cieMarks >= 20 && sis.backlogs === 0 && (sis.feeDues + sis.libraryDues === 0) && sis.capstoneScore >= 60;
+                  return (
+                    <tr key={sis.studentId} style={{ background: isEligible ? 'transparent' : 'rgba(239,68,68,0.05)' }}>
+                      <td><code>{sis.studentId}</code></td>
+                      <td>
+                        <strong>{sis.name}</strong>
+                        <div style={{ fontSize: '0.75rem', color: isEligible ? '#34d399' : '#f87171' }}>
+                          {isEligible ? '✓ Eligible Graduate' : '⚠️ Has Deficit / Hold'}
+                        </div>
+                      </td>
+                      <td>{sis.department}</td>
+                      <td>
+                        <span style={{ color: sis.attendance >= 75 ? '#34d399' : '#f87171', fontWeight: 600 }}>
+                          {sis.attendance}%
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ color: sis.cieMarks >= 20 ? '#34d399' : '#f87171' }}>
+                          {sis.cieMarks}/50
+                        </span>
+                      </td>
+                      <td><strong>{sis.cgpa.toFixed(2)}</strong></td>
+                      <td>
+                        <span style={{ color: sis.backlogs === 0 ? '#34d399' : '#f87171', fontWeight: sis.backlogs > 0 ? 700 : 400 }}>
+                          {sis.backlogs}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ color: sis.capstoneScore >= 60 ? '#34d399' : '#f87171' }}>
+                          {sis.capstoneScore}/100
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ color: (sis.feeDues + sis.libraryDues) === 0 ? '#34d399' : '#f87171' }}>
+                          ₹{sis.feeDues + sis.libraryDues}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                          onClick={() => {
+                            setForm({
+                              studentId: sis.studentId,
+                              name: sis.name,
+                              email: sis.email,
+                              department: sis.department,
+                              enrollmentYear: sis.enrollmentYear
+                            });
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >
+                          Quick-Fill
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

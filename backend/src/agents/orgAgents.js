@@ -8,11 +8,23 @@ function parseLLMResponse(llmRes, defaultRationale) {
   let confidence = 0.98;
   let rationale = defaultRationale;
 
+  const normalizeDecision = (val) => {
+    if (!val) return 'APPROVE';
+    const norm = String(val).toUpperCase();
+    if (norm.includes('APPROV') || norm.includes('COMPLIANT') || norm.includes('PASS') || norm.includes('CLEAR') || norm.includes('ELIGIBLE') || norm.includes('VALID')) {
+      return 'APPROVE';
+    }
+    if (norm.includes('REJECT') || norm.includes('DENY') || norm.includes('FAIL') || norm.includes('FLAG')) {
+      return 'REJECT';
+    }
+    return norm;
+  };
+
   if (llmRes && llmRes.content) {
     try {
       const cleaned = llmRes.content.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleaned);
-      if (parsed.decision) decision = parsed.decision.toUpperCase();
+      if (parsed.decision) decision = normalizeDecision(parsed.decision);
       if (parsed.confidence) confidence = Number(parsed.confidence);
       if (parsed.reasoning) rationale = parsed.reasoning;
     } catch (e) {
@@ -21,7 +33,7 @@ function parseLLMResponse(llmRes, defaultRationale) {
       if (match) {
         try {
           const parsed = JSON.parse(match[0]);
-          if (parsed.decision) decision = parsed.decision.toUpperCase();
+          if (parsed.decision) decision = normalizeDecision(parsed.decision);
           if (parsed.confidence) confidence = Number(parsed.confidence);
           if (parsed.reasoning) rationale = parsed.reasoning;
         } catch (err) {

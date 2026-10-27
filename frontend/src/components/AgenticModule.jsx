@@ -24,7 +24,8 @@ import {
   ChevronUp,
   Download,
   Award,
-  CheckCircle
+  CheckCircle,
+  KeyRound
 } from 'lucide-react';
 
 const AGENT_STAGES = [
@@ -108,9 +109,10 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
   const [issuanceResult, setIssuanceResult] = useState(null);
   const [completedDossier, setCompletedDossier] = useState(null);
   const [hfConfig, setHfConfig] = useState({
-    configured: true,
-    maskedKey: 'CONFIGURED (.env)',
-    model: 'meta-llama/Meta-Llama-3-8B-Instruct'
+    provider: 'Checking...',
+    groqConfigured: false,
+    hfConfigured: false,
+    model: 'llama-3.1-8b-instant'
   });
 
   const terminalRef = useRef(null);
@@ -136,7 +138,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
         setHfConfig(data);
       }
     } catch (e) {
-      console.warn('Could not load HF config:', e);
+      console.warn('Could not load AI config from .env:', e);
     }
   };
 
@@ -279,60 +281,71 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
         })
       });
       const data = await res.json();
+      const logs = data.executionLogs || [];
 
-      if (res.ok && data.success) {
-        const logs = data.executionLogs || [];
+      // Paced presentation loop through all executed agent stages
+      for (let i = 0; i < logs.length; i++) {
+        const log = logs[i];
+        if (log.step === 'PRE_FLIGHT_FRAUD_SCAN') continue;
 
-        // Paced presentation loop so observers can clearly read each agent's thoughts & actions
-        for (let i = 0; i < logs.length; i++) {
-          const log = logs[i];
-          const stageIndex = i + 1;
-          setCurrentExecutingIndex(stageIndex);
-          const stageDef = AGENT_STAGES[stageIndex] || { title: log.step, icon: '🤖' };
-          setCurrentExecutingTitle(`Step ${stageIndex + 1}/8: ${stageDef.icon} ${stageDef.title}`);
+        const stageIndex = 
+          log.step === 'FACULTY_APPROVAL' ? 1 :
+          log.step === 'HOD_APPROVAL' ? 2 :
+          log.step === 'DAC_APPROVAL' ? 3 :
+          log.step === 'EXAM_LOCK' ? 4 :
+          log.step === 'DEAN_APPROVAL' ? 5 :
+          log.step === 'ADMIN_FINALIZATION' ? 6 :
+          log.step === 'CERTIFICATE_MINTED_AND_ANCHORED' ? 7 : i + 1;
 
-          const tag = log.agent ? `[${log.agent}]` : `[${log.step}]`;
-          addLog(`\n${tag} Step: ${log.step}`);
-          if (log.aiSource) addLog(`  • AI Engine: ${log.aiSource} (${log.model || 'Llama 3'})`);
-          if (log.confidence) addLog(`  • LLM Confidence: ${(log.confidence * 100).toFixed(1)}%`);
-          if (log.rationale) addLog(`  • Rationale: ${log.rationale}`);
-          if (log.gradesHash) addLog(`  • Merkle Digest: ${log.gradesHash}`);
-          if (log.issuanceResult) {
-            addLog(`  🎉 Certificate Minted: ${log.issuanceResult.certId}`);
-            addLog(`  • IPFS CID: ${log.issuanceResult.ipfsCid}`);
-            addLog(`  • SHA-256 Digest: ${log.issuanceResult.sha256Hash}`);
-          }
+        setCurrentExecutingIndex(stageIndex);
+        const stageDef = AGENT_STAGES[stageIndex] || { title: log.step, icon: '🤖' };
+        setCurrentExecutingTitle(`Step ${stageIndex + 1}/8: ${stageDef.icon} ${stageDef.title}`);
 
-          const stageKey = 
-            log.step === 'FACULTY_APPROVAL' ? 'faculty' :
-            log.step === 'HOD_APPROVAL' ? 'hod' :
-            log.step === 'DAC_APPROVAL' ? 'dac' :
-            log.step === 'EXAM_LOCK' ? 'exam' :
-            log.step === 'DEAN_APPROVAL' ? 'dean' :
-            log.step === 'ADMIN_FINALIZATION' ? 'admin' :
-            log.step === 'CERTIFICATE_MINTED_AND_ANCHORED' ? 'mint' : 'step_' + i;
-
-          setStageResults(prev => ({
-            ...prev,
-            [stageKey]: {
-              status: 'SUCCESS',
-              title: log.step.replace(/_/g, ' '),
-              agent: log.agent || 'Consortium Agent',
-              aiSource: log.aiSource,
-              model: log.model,
-              confidence: log.confidence || 0.98,
-              gradesHash: log.gradesHash,
-              verdict: 'APPROVED & COMMITTED',
-              rationale: log.rationale || log.comments || 'Evaluated and approved on Fabric ledger',
-              issuanceResult: log.issuanceResult,
-              timestamp: new Date().toLocaleTimeString()
-            }
-          }));
-
-          // Give users 1.8 seconds per agent step to read the thought process
-          await sleep(1800);
+        const tag = log.agent ? `[${log.agent}]` : `[${log.step}]`;
+        addLog(`\n${tag} Step: ${log.step}`);
+        if (log.aiSource) addLog(`  • AI Engine: ${log.aiSource} (${log.model || 'Llama 3'})`);
+        if (log.confidence) addLog(`  • LLM Confidence: ${(log.confidence * 100).toFixed(1)}%`);
+        if (log.rationale) addLog(`  • Rationale: ${log.rationale}`);
+        if (log.gradesHash) addLog(`  • Merkle Digest: ${log.gradesHash}`);
+        if (log.issuanceResult) {
+          addLog(`  🎉 Certificate Minted: ${log.issuanceResult.certId}`);
+          addLog(`  • IPFS CID: ${log.issuanceResult.ipfsCid}`);
+          addLog(`  • SHA-256 Digest: ${log.issuanceResult.sha256Hash}`);
         }
 
+        const stageKey = 
+          log.step === 'FACULTY_APPROVAL' ? 'faculty' :
+          log.step === 'HOD_APPROVAL' ? 'hod' :
+          log.step === 'DAC_APPROVAL' ? 'dac' :
+          log.step === 'EXAM_LOCK' ? 'exam' :
+          log.step === 'DEAN_APPROVAL' ? 'dean' :
+          log.step === 'ADMIN_FINALIZATION' ? 'admin' :
+          log.step === 'CERTIFICATE_MINTED_AND_ANCHORED' ? 'mint' : 'step_' + i;
+
+        const isSuccess = log.success !== false;
+
+        setStageResults(prev => ({
+          ...prev,
+          [stageKey]: {
+            status: isSuccess ? 'SUCCESS' : 'HALTED',
+            title: log.step.replace(/_/g, ' '),
+            agent: log.agent || 'Consortium Agent',
+            aiSource: log.aiSource,
+            model: log.model,
+            confidence: log.confidence || (isSuccess ? 0.98 : 0.10),
+            gradesHash: log.gradesHash,
+            verdict: isSuccess ? 'APPROVED & COMMITTED' : 'HALTED / CLEARANCE HOLD',
+            rationale: log.rationale || log.comments || (isSuccess ? 'Evaluated and approved on Fabric ledger' : 'Administrative clearance blocked'),
+            issuanceResult: log.issuanceResult,
+            timestamp: new Date().toLocaleTimeString()
+          }
+        }));
+
+        // Pacing pause so observers can visually see each agent think & decide
+        await sleep(1500);
+      }
+
+      if (res.ok && data.success) {
         setCurrentExecutingIndex(AGENT_STAGES.length);
         setCurrentExecutingTitle('Pipeline Completed! All 8 stages approved.');
         setPipelineStatus('SUCCESS');
@@ -355,12 +368,11 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
         addLog(`========================================================`);
       } else {
         setPipelineStatus('FAILED');
-        addLog(`\n❌ [Pipeline Halted/Failed] ${data.error || data.message || 'Execution error'}`);
-        if (data.executionLogs) {
-          data.executionLogs.forEach(log => {
-            addLog(`  [${log.agent || log.step}] ${log.rationale || log.status || ''}`);
-          });
-        }
+        const haltedAgent = data.haltedBy ? `by ${data.haltedBy}` : '';
+        const failureReason = data.message || data.error || 'Pipeline halted by consortium agent';
+        addLog(`\n🛑 [Pipeline Halted ${haltedAgent}] ${failureReason}`);
+        setCurrentExecutingIndex(-1);
+        setCurrentExecutingTitle(`Pipeline Halted ${haltedAgent}: ${failureReason}`);
       }
     } catch (err) {
       setPipelineStatus('FAILED');
@@ -390,9 +402,9 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
             <span style={{ 
-              background: 'rgba(16, 185, 129, 0.15)', 
-              color: '#34d399', 
-              border: '1px solid #10b981', 
+              background: hfConfig.groqConfigured ? 'rgba(16, 185, 129, 0.15)' : hfConfig.hfConfigured ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)', 
+              color: hfConfig.groqConfigured ? '#34d399' : hfConfig.hfConfigured ? '#38bdf8' : '#fbbf24', 
+              border: `1px solid ${hfConfig.groqConfigured ? '#10b981' : hfConfig.hfConfigured ? '#38bdf8' : '#f59e0b'}`, 
               padding: '0.35rem 0.75rem', 
               borderRadius: '20px', 
               fontSize: '0.8rem',
@@ -401,7 +413,12 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
               alignItems: 'center',
               gap: '0.4rem'
             }}>
-              <Sparkles size={14} /> 🤗 HF LLM: {hfConfig.model ? hfConfig.model.split('/')[1] || hfConfig.model : 'Llama-3-8B'}
+              <Sparkles size={14} /> 
+              {hfConfig.groqConfigured 
+                ? `⚡ Groq (.env): ${hfConfig.model}` 
+                : hfConfig.hfConfigured 
+                ? `🤗 HF (.env): ${hfConfig.model ? hfConfig.model.split('/')[1] || hfConfig.model : 'Llama-3-8B'}` 
+                : '⚠️ Fallback (.env): Deterministic Logic'}
             </span>
             <span className="agent-badge">🏛️ Org1 Academic Agent</span>
             <span className="agent-badge">🔒 Org2 Exam Agent</span>
@@ -605,6 +622,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
             const isCompleted = Boolean(stageResults[st.id]);
             const isCurrent = loading && currentExecutingIndex === idx;
             const res = stageResults[st.id];
+            const isHalted = res?.status === 'HALTED';
 
             return (
               <div 
@@ -613,16 +631,22 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                 style={{
                   background: isCurrent 
                     ? 'rgba(79, 70, 229, 0.25)' 
-                    : (isCompleted ? 'rgba(16, 185, 129, 0.08)' : '#0f172a'),
+                    : (isHalted 
+                        ? 'rgba(239, 68, 68, 0.12)' 
+                        : (isCompleted ? 'rgba(16, 185, 129, 0.08)' : '#0f172a')),
                   border: isCurrent 
                     ? '2px solid #818cf8' 
-                    : (isCompleted ? '1px solid #10b981' : '1px solid #334155'),
+                    : (isHalted 
+                        ? '1px solid #ef4444' 
+                        : (isCompleted ? '1px solid #10b981' : '1px solid #334155')),
                   borderRadius: '10px',
                   padding: '1rem',
                   cursor: res ? 'pointer' : 'default',
                   position: 'relative',
                   transition: 'all 0.2s ease',
-                  boxShadow: isCurrent ? '0 0 15px rgba(99, 102, 241, 0.4)' : 'none'
+                  boxShadow: isCurrent 
+                    ? '0 0 15px rgba(99, 102, 241, 0.4)' 
+                    : (isHalted ? '0 0 12px rgba(239, 68, 68, 0.25)' : 'none')
                 }}
               >
                 {/* Header */}
@@ -639,7 +663,12 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                         ⏳ Auditing...
                       </span>
                     )}
-                    {isCompleted && (
+                    {isCompleted && isHalted && (
+                      <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.75rem', fontWeight: '700' }}>
+                        <AlertTriangle size={14} /> Clearance Hold
+                      </span>
+                    )}
+                    {isCompleted && !isHalted && (
                       <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.75rem', fontWeight: '700' }}>
                         <CheckCircle2 size={14} /> Approved
                       </span>
@@ -665,14 +694,16 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                     padding: '0.5rem', 
                     background: 'rgba(0, 0, 0, 0.3)', 
                     borderRadius: '6px', 
-                    borderLeft: '3px solid #10b981',
+                    borderLeft: isHalted ? '3px solid #ef4444' : '3px solid #10b981',
                     fontSize: '0.75rem'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1' }}>
                       <strong>{res.agent}</strong>
-                      <span style={{ color: '#38bdf8' }}>{(res.confidence * 100).toFixed(1)}% Conf.</span>
+                      <span style={{ color: isHalted ? '#f87171' : '#38bdf8' }}>
+                        {isHalted ? 'CLEARANCE HOLD' : `${(res.confidence * 100).toFixed(1)}% Conf.`}
+                      </span>
                     </div>
-                    <div style={{ color: '#94a3b8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ color: isHalted ? '#fca5a5' : '#94a3b8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {res.rationale}
                     </div>
                   </div>

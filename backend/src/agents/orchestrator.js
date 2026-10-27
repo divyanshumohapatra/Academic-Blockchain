@@ -103,7 +103,15 @@ class MasterOrchestrator {
     if (requestObj.status === 'SUBMITTED') {
       const res = await this.facultyAgent.auditAndApprove(requestId, details);
       executionLogs.push({ step: 'FACULTY_APPROVAL', ...res });
-      if (!res.success) return { success: false, executionLogs, finalStatus: requestObj.status };
+      if (!res.success) {
+        return {
+          success: false,
+          message: res.rationale || `Halted by ${res.agent || 'Faculty Agent'} at stage ${res.stage || 'FACULTY_APPROVED'}`,
+          haltedBy: res.agent,
+          executionLogs,
+          finalStatus: requestObj.status
+        };
+      }
       requestObj.status = 'FACULTY_APPROVED';
     }
 
@@ -111,7 +119,15 @@ class MasterOrchestrator {
     if (requestObj.status === 'FACULTY_APPROVED') {
       const res = await this.hodAgent.auditAndApprove(requestId, details);
       executionLogs.push({ step: 'HOD_APPROVAL', ...res });
-      if (!res.success) return { success: false, executionLogs, finalStatus: requestObj.status };
+      if (!res.success) {
+        return {
+          success: false,
+          message: res.rationale || `Halted by ${res.agent || 'HOD Agent'} at stage ${res.stage || 'HOD_APPROVED'}`,
+          haltedBy: res.agent,
+          executionLogs,
+          finalStatus: requestObj.status
+        };
+      }
       requestObj.status = 'HOD_APPROVED';
     }
 
@@ -119,7 +135,15 @@ class MasterOrchestrator {
     if (requestObj.status === 'HOD_APPROVED') {
       const res = await this.dacAgent.auditAndApprove(requestId, details);
       executionLogs.push({ step: 'DAC_APPROVAL', ...res });
-      if (!res.success) return { success: false, executionLogs, finalStatus: requestObj.status };
+      if (!res.success) {
+        return {
+          success: false,
+          message: res.rationale || `Halted by ${res.agent || 'DAC Agent'} at stage ${res.stage || 'DAC_APPROVED'}`,
+          haltedBy: res.agent,
+          executionLogs,
+          finalStatus: requestObj.status
+        };
+      }
       requestObj.status = 'DAC_APPROVED';
     }
 
@@ -127,7 +151,15 @@ class MasterOrchestrator {
     if (requestObj.status === 'DAC_APPROVED') {
       const res = await this.examLockAgent.auditAndLock(requestId, details);
       executionLogs.push({ step: 'EXAM_LOCK', ...res });
-      if (!res.success) return { success: false, executionLogs, finalStatus: requestObj.status };
+      if (!res.success) {
+        return {
+          success: false,
+          message: res.rationale || `Halted by ${res.agent || 'Exam Lock Agent'} at stage ${res.stage || 'EXAM_LOCKED'}`,
+          haltedBy: res.agent,
+          executionLogs,
+          finalStatus: requestObj.status
+        };
+      }
       requestObj.status = 'EXAM_LOCKED';
     }
 
@@ -135,7 +167,15 @@ class MasterOrchestrator {
     if (requestObj.status === 'EXAM_LOCKED') {
       const res = await this.deanAgent.auditAndApprove(requestId, details);
       executionLogs.push({ step: 'DEAN_APPROVAL', ...res });
-      if (!res.success) return { success: false, executionLogs, finalStatus: requestObj.status };
+      if (!res.success) {
+        return {
+          success: false,
+          message: res.rationale || `Halted by ${res.agent || 'Dean Agent'} at stage ${res.stage || 'DEAN_APPROVED'}`,
+          haltedBy: res.agent,
+          executionLogs,
+          finalStatus: requestObj.status
+        };
+      }
       requestObj.status = 'DEAN_APPROVED';
     }
 
@@ -143,7 +183,15 @@ class MasterOrchestrator {
     if (requestObj.status === 'DEAN_APPROVED') {
       const res = await this.adminFinalizeAgent.auditAndFinalize(requestId, details);
       executionLogs.push({ step: 'ADMIN_FINALIZATION', ...res });
-      if (!res.success) return { success: false, executionLogs, finalStatus: requestObj.status };
+      if (!res.success) {
+        return {
+          success: false,
+          message: res.rationale || `Halted by ${res.agent || 'Admin Registrar Agent'} at stage ${res.stage || 'ADMIN_FINALIZED'}`,
+          haltedBy: res.agent,
+          executionLogs,
+          finalStatus: requestObj.status
+        };
+      }
       requestObj.status = 'ADMIN_FINALIZED';
     }
 

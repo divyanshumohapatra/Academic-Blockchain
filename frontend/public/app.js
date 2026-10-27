@@ -116,31 +116,91 @@ function initStudentRegistration() {
 
 async function loadStudents() {
   const tbody = document.getElementById('studentsTbody');
-  if (!tbody) return;
+  const sisTbody = document.getElementById('sisTbody');
 
   try {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Fetching students...</td></tr>';
-    const res = await fetch(`${API_BASE}/students`);
-    const students = await res.json();
-
-    if (!Array.isArray(students) || students.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">No students registered yet.</td></tr>';
-      return;
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Fetching registered students...</td></tr>';
+    }
+    if (sisTbody) {
+      sisTbody.innerHTML = '<tr><td colspan="10" class="empty-hint">Fetching SIS records...</td></tr>';
     }
 
-    tbody.innerHTML = students.map(s => `
-      <tr>
-        <td><code>${s.studentId}</code></td>
-        <td><strong>${s.name}</strong></td>
-        <td>${s.email}</td>
-        <td>${s.department}</td>
-        <td>${s.enrollmentYear}</td>
-      </tr>
-    `).join('');
+    const [ledgerRes, sisRes] = await Promise.all([
+      fetch(`${API_BASE}/students`),
+      fetch(`${API_BASE}/sis/students`)
+    ]);
+
+    const students = await ledgerRes.json();
+    const sisStudents = await sisRes.json();
+
+    if (tbody) {
+      if (!Array.isArray(students) || students.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">No students registered yet on ledger.</td></tr>';
+      } else {
+        tbody.innerHTML = students.map(s => `
+          <tr>
+            <td><code>${s.studentId}</code></td>
+            <td><strong>${s.name}</strong></td>
+            <td>${s.email}</td>
+            <td>${s.department}</td>
+            <td>${s.enrollmentYear}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    if (sisTbody && Array.isArray(sisStudents)) {
+      sisTbody.innerHTML = sisStudents.map(sis => {
+        const isEligible = sis.attendance >= 75 && sis.cieMarks >= 20 && sis.backlogs === 0 && (sis.feeDues + sis.libraryDues === 0) && sis.capstoneScore >= 60;
+        return `
+          <tr style="background: ${isEligible ? 'transparent' : 'rgba(239,68,68,0.05)'};">
+            <td><code>${sis.studentId}</code></td>
+            <td>
+              <strong>${sis.name}</strong>
+              <div style="font-size:0.75rem; color:${isEligible ? '#34d399' : '#f87171'};">
+                ${isEligible ? '✓ Eligible Graduate' : '⚠️ Has Deficit / Hold'}
+              </div>
+            </td>
+            <td>${sis.department}</td>
+            <td style="color:${sis.attendance >= 75 ? '#34d399' : '#f87171'}; font-weight:600;">${sis.attendance}%</td>
+            <td style="color:${sis.cieMarks >= 20 ? '#34d399' : '#f87171'};">${sis.cieMarks}/50</td>
+            <td><strong>${sis.cgpa.toFixed(2)}</strong></td>
+            <td style="color:${sis.backlogs === 0 ? '#34d399' : '#f87171'}; font-weight:${sis.backlogs > 0 ? 700 : 400};">${sis.backlogs}</td>
+            <td style="color:${sis.capstoneScore >= 60 ? '#34d399' : '#f87171'};">${sis.capstoneScore}/100</td>
+            <td style="color:${(sis.feeDues + sis.libraryDues) === 0 ? '#34d399' : '#f87171'};">₹${sis.feeDues + sis.libraryDues}</td>
+            <td>
+              <button type="button" class="btn-secondary btn-sm" style="padding:4px 8px; font-size:0.75rem;" onclick="quickFillStudent('${sis.studentId}', '${sis.name.replace(/'/g, "\\'")}', '${sis.email}', '${sis.department}', '${sis.enrollmentYear}')">
+                Quick-Fill
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty-hint">Error: ${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="empty-hint">Error: ${err.message}</td></tr>`;
+    if (sisTbody) sisTbody.innerHTML = `<tr><td colspan="10" class="empty-hint">Error: ${err.message}</td></tr>`;
   }
 }
+
+window.quickFillStudent = function(studentId, name, email, department, enrollmentYear) {
+  const stuId = document.getElementById('stuId');
+  const stuName = document.getElementById('stuName');
+  const stuEmail = document.getElementById('stuEmail');
+  const stuDept = document.getElementById('stuDept');
+  const stuYear = document.getElementById('stuYear');
+  if (stuId) stuId.value = studentId;
+  if (stuName) stuName.value = name;
+  if (stuEmail) stuEmail.value = email;
+  if (stuDept) stuDept.value = department;
+  if (stuYear) stuYear.value = enrollmentYear;
+
+  const reqStudentId = document.getElementById('reqStudentId');
+  if (reqStudentId) reqStudentId.value = studentId;
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
 // ==========================================
 // Workflow & 7-Stage State Machine
