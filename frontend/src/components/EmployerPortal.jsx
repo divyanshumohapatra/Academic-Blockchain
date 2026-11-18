@@ -86,6 +86,21 @@ export default function EmployerPortal({ initialCertId }) {
     }
   };
 
+  const verifyByDID = async (did) => {
+    if (!did) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/verify/did/${encodeURIComponent(did)}`);
+      const data = await res.json();
+      setResult({ ...data, queryType: 'did', queryValue: did, certificate: data.certificate || data });
+    } catch (err) {
+      setResult({ verificationStatus: 'ERROR', message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Camera QR Scanner
   const startCameraScanner = async () => {
     try {
@@ -312,22 +327,25 @@ export default function EmployerPortal({ initialCertId }) {
           </div>
         )}
 
-        {/* Tab 3: Search by ID or Hash */}
+        {/* Tab 3: Search by ID, Hash, or Student DID */}
         {activeTab === 'search' && (
           <div className="verifier-body">
             <form onSubmit={(e) => {
               e.preventDefault();
-              if (manualInput.length === 64 && /^[0-9a-fA-F]+$/.test(manualInput)) {
-                verifyByHash(manualInput);
+              const trimmed = manualInput.trim();
+              if (trimmed.startsWith('did:academic:')) {
+                verifyByDID(trimmed);
+              } else if (trimmed.length === 64 && /^[0-9a-fA-F]+$/.test(trimmed)) {
+                verifyByHash(trimmed);
               } else {
-                verifyById(manualInput);
+                verifyById(trimmed);
               }
             }}>
               <div className="search-input-group">
                 <Search size={20} className="search-icon" />
                 <input 
                   type="text" 
-                  placeholder="Enter Certificate ID (e.g. CERT-2024-001) or SHA-256 Hash..."
+                  placeholder="Enter Certificate ID, Student DID (did:academic:...), or SHA-256 Hash..."
                   value={manualInput}
                   onChange={(e) => setManualInput(e.target.value)}
                   required
@@ -339,7 +357,7 @@ export default function EmployerPortal({ initialCertId }) {
             </form>
 
             <div className="sample-chips-row">
-              <span className="chips-label">Sample IDs:</span>
+              <span className="chips-label">Sample Lookups:</span>
               <button 
                 type="button" 
                 className="chip-btn"
@@ -349,6 +367,16 @@ export default function EmployerPortal({ initialCertId }) {
                 }}
               >
                 CERT-2024-001
+              </button>
+              <button 
+                type="button" 
+                className="chip-btn"
+                onClick={() => {
+                  setManualInput('did:academic:a038a2bdb75e4eca20c7efcf34c62fa57f7bd1be');
+                  verifyByDID('did:academic:a038a2bdb75e4eca20c7efcf34c62fa57f7bd1be');
+                }}
+              >
+                Alice DID (did:academic:a038...)
               </button>
             </div>
           </div>
@@ -413,6 +441,11 @@ export default function EmployerPortal({ initialCertId }) {
                 <div className="kv-row">
                   <span className="kv-label">Registration ID</span>
                   <span className="kv-val">{cert.studentId || 'N/A'}</span>
+                </div>
+
+                <div className="kv-row">
+                  <span className="kv-label">Decentralized ID (DID)</span>
+                  <span className="kv-val"><code style={{ wordBreak: 'break-all', fontSize: '0.78rem' }}>{cert.studentDid || result.did || 'did:academic:...'}</code></span>
                 </div>
 
                 <div className="kv-row">

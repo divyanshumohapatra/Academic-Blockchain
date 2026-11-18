@@ -40,6 +40,7 @@ export default function LedgerExplorer() {
             <tr>
               <th>Cert ID</th>
               <th>Student ID</th>
+              <th>Student Name</th>
               <th>Degree Title</th>
               <th>Status</th>
               <th>IPFS CID</th>
@@ -49,23 +50,24 @@ export default function LedgerExplorer() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="empty-hint">Querying ledger records...</td></tr>
+              <tr><td colSpan="8" className="empty-hint">Querying ledger records...</td></tr>
             ) : certs.length === 0 ? (
-              <tr><td colSpan="7" className="empty-hint">No certificates on ledger yet.</td></tr>
+              <tr><td colSpan="8" className="empty-hint">No certificates on ledger yet.</td></tr>
             ) : (
               certs.map((c) => (
                 <tr key={c.certId}>
                   <td><code>{c.certId}</code></td>
-                  <td>{c.studentId}</td>
-                  <td><strong>{c.certType}</strong></td>
+                  <td><code>{c.studentId}</code></td>
+                  <td><strong>{c.studentName || 'Student'}</strong></td>
+                  <td>{c.certType}</td>
                   <td>
                     <span className={`status-pill ${c.status === 'ISSUED' ? 'issued' : 'revoked'}`}>
-                      {c.status}
+                      {c.status || 'ISSUED'}
                     </span>
                   </td>
                   <td>
                     {c.ipfsHash ? (
-                      <a href={`http://localhost:8080/ipfs/${c.ipfsHash}`} target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'none' }}>
+                      <a href={`http://localhost:8080/ipfs/${c.ipfsHash}`} target="_blank" rel="noreferrer" style={{ color: '#0284c7', textDecoration: 'none' }}>
                         {c.ipfsHash.substring(0, 10)}...
                       </a>
                     ) : '—'}
@@ -76,8 +78,8 @@ export default function LedgerExplorer() {
                     </code>
                   </td>
                   <td>
-                    <a href={`${API_BASE}/certificates/${c.certId}/pdf`} target="_blank" rel="noreferrer" className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
-                      <FileText size={12} /> PDF
+                    <a href={`${API_BASE}/certificates/${c.certId}/pdf`} target="_blank" rel="noreferrer" className="btn-secondary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <FileText size={12} /> View PDF
                     </a>
                   </td>
                 </tr>

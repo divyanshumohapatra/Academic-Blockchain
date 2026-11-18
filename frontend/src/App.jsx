@@ -8,6 +8,9 @@ import EmployerPortal from './components/EmployerPortal';
 import RevocationModule from './components/RevocationModule';
 import LedgerExplorer from './components/LedgerExplorer';
 import AgenticModule from './components/AgenticModule';
+import FacultyPortal from './components/FacultyPortal';
+import FacultyAdvisorModule from './components/FacultyAdvisorModule';
+import ChatbotWidget from './components/ChatbotWidget';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -15,18 +18,20 @@ import {
   ShieldAlert, 
   Database,
   Building2,
-  Bot
+  Bot,
+  GraduationCap,
+  Users
 } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('consortium'); // 'consortium' | 'employer'
-  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'students', 'verify', 'revoke', 'ledger'
+  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'faculty', 'advisor', 'agents', 'students', 'revoke', 'ledger'
   const [activeRequestId, setActiveRequestId] = useState('REQ-2024-001');
   const [readyRequest, setReadyRequest] = useState(null);
 
   useEffect(() => {
     // Check if user landed on /verify or has verify query params
-    if (window.location.pathname.includes('verify') || window.location.search.includes('certId')) {
+    if (window.location.pathname.includes('verify') || window.location.search.includes('certId') || window.location.search.includes('did')) {
       setCurrentView('employer');
     }
   }, []);
@@ -49,21 +54,37 @@ export default function App() {
                 onClick={() => setActiveTab('workflow')}
               >
                 <ClipboardList size={16} />
-                Lifecycle & Workflow
+                Lifecycle & Multi-Sig
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'faculty' ? 'active' : ''}`}
+                onClick={() => setActiveTab('faculty')}
+              >
+                <GraduationCap size={16} />
+                Faculty Grading & Auth
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'advisor' ? 'active' : ''}`}
+                onClick={() => setActiveTab('advisor')}
+              >
+                <Users size={16} />
+                Faculty Advisor Gate
               </button>
 
               <button 
                 className={`tab-btn ${activeTab === 'agents' ? 'active' : ''}`}
                 onClick={() => setActiveTab('agents')}
                 style={{
-                  background: activeTab === 'agents' ? 'linear-gradient(135deg, #4f46e5, #0284c7)' : 'rgba(79, 70, 229, 0.12)',
-                  borderColor: '#6366f1',
-                  color: '#fff',
+                  background: activeTab === 'agents' ? 'var(--primary)' : 'rgba(30, 58, 138, 0.08)',
+                  borderColor: 'var(--primary-border)',
+                  color: activeTab === 'agents' ? '#ffffff' : 'var(--primary)',
                   fontWeight: '600'
                 }}
               >
                 <Bot size={16} />
-                🤖 Autonomous Agentic Engine
+                🤖 Autonomous Multi-Agent AI
               </button>
 
               <button 
@@ -71,7 +92,7 @@ export default function App() {
                 onClick={() => setActiveTab('students')}
               >
                 <UserCheck size={16} />
-                Student Registration
+                Student Registration & DID
               </button>
 
               <button 
@@ -107,6 +128,10 @@ export default function App() {
               </>
             )}
 
+            {activeTab === 'faculty' && <FacultyPortal />}
+
+            {activeTab === 'advisor' && <FacultyAdvisorModule />}
+
             {activeTab === 'agents' && (
               <AgenticModule 
                 activeRequestId={activeRequestId}
@@ -126,8 +151,10 @@ export default function App() {
         )}
       </main>
 
+      <ChatbotWidget />
+
       <footer className="footer">
-        <p>Academic Blockchain Consortium • Hyperledger Fabric 2.5 Multi-Org Network (Org1, Org2, Org3) • Autonomous Multi-Agent AI</p>
+        <p>National Institute of Technology Warangal • Academic Blockchain Consortium • Hyperledger Fabric 2.5 (Org1, Org2, Org3) • IPFS Decentralized Storage • Autonomous Multi-Agent AI</p>
       </footer>
     </div>
   );

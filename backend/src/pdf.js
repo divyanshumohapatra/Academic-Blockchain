@@ -3,6 +3,7 @@
 const os = require('os');
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
+const { generateStudentDID } = require('./cryptoUtil');
 
 /**
  * Get host address accessible from mobile phones on the same Wi-Fi network.
@@ -329,14 +330,24 @@ async function generateCertificatePDF(certData) {
          .fillColor('#1e3a8a')
          .text(certData.studentName || 'Student Name', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 23;
-      doc.fontSize(11)
+      currY += 21;
+      doc.fontSize(10.5)
          .font('Helvetica')
          .fillColor('#334155')
          .text(`bearing Registration / Roll Number: `, 40, currY, { width: contentWidth, align: 'center', continued: true })
          .font('Helvetica-Bold')
          .fillColor('#0f172a')
          .text(`${certData.studentId || 'N/A'}`);
+
+      currY += 14;
+      const studentDid = certData.studentDid || (certData.studentId ? generateStudentDID(certData.studentName || 'Student', certData.studentId) : 'N/A');
+      doc.fontSize(8.5)
+         .font('Helvetica')
+         .fillColor('#64748b')
+         .text(`Decentralized Identifier (DID): `, 40, currY, { width: contentWidth, align: 'center', continued: true })
+         .font('Courier-Bold')
+         .fillColor('#1e3a8a')
+         .text(`${studentDid}`);
 
       currY += 16;
       doc.fontSize(11)
