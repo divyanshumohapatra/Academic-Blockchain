@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initVerification();
   initRevocation();
   initLedgerExplorer();
+  initTelemetryDashboard();
   initAgenticEngine();
   initChatbot();
 
@@ -43,6 +44,7 @@ function initTabs() {
 
       if (btn.dataset.tab === 'register-tab') loadStudents();
       if (btn.dataset.tab === 'ledger-tab') loadCertificates();
+      if (btn.dataset.tab === 'telemetry-tab') loadTelemetryData();
     });
   });
 }
@@ -971,3 +973,118 @@ function initChatbot() {
   }
 }
 
+
+
+// ==========================================
+// Contributor 6.2: Health & Telemetry Sentinel
+// ==========================================
+function initTelemetryDashboard() {
+  const probeBtn = document.getElementById('probeTelemetryBtn');
+  if (probeBtn) {
+    probeBtn.addEventListener('click', loadTelemetryData);
+  }
+}
+
+async function loadTelemetryData() {
+  const statusEl = document.getElementById('tmSystemStatus');
+  const countEl = document.getElementById('tmHealthyContainers');
+  const heightEl = document.getElementById('tmBlockHeight');
+  const parityEl = document.getElementById('tmSyncParity');
+  const latencyEl = document.getElementById('tmProbeLatency');
+  const peersTbody = document.getElementById('tmPeersTbody');
+  const nodesTbody = document.getElementById('tmNodesTbody');
+  const adviceList = document.getElementById('tmAdviceList');
+
+  if (statusEl) statusEl.textContent = 'PROBING...';
+  if (peersTbody) peersTbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Sending gRPC probes across 3 Orgs...</td></tr>';
+  if (nodesTbody) nodesTbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Probing Docker engine and daemon ports...</td></tr>';
+
+  try {
+    const res = await fetch(`${API_BASE}/agent/health/telemetry`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = 'ERROR';
+      return;
+    }
+
+    // Top metrics
+    if (statusEl) {
+      statusEl.textContent = data.status;
+      statusEl.style.color = data.status === 'OPTIMAL' ? '#10b981' : (data.status === 'DEGRADED' ? '#f59e0b' : '#ef4444');
+    }
+    if (countEl) countEl.textContent = `${data.summary?.healthyContainers || 'N/A'} Active`;
+    if (heightEl) heightEl.textContent = `Block #${data.summary?.blockHeight ?? 0}`;
+    if (parityEl) {
+      const inSync = data.summary?.inSync;
+      parityEl.textContent = inSync ? '100% IN SYNC' : 'DRIFT DETECTED';
+      parityEl.style.color = inSync ? '#10b981' : '#ef4444';
+    }
+    if (latencyEl) latencyEl.textContent = `${data.summary?.diagnosticLatencyMs || 0} ms`;
+
+    // Section 1: Peers Sync Parity Table
+    if (peersTbody && data.syncParity?.peers) {
+      peersTbody.innerHTML = data.syncParity.peers.map(p => `
+        <tr>
+          <td><strong>${p.org}</strong></td>
+          <td><code>${p.peer}:${p.port}</code></td>
+          <td><code>${p.msp}</code></td>
+          <td><span style="font-weight:700; color:#38bdf8;">#${p.height !== null ? p.height : 'N/A'}</span></td>
+          <td style="font-family:monospace; font-size:0.75rem; word-break:break-all;">${p.currentBlockHash || 'N/A'}</td>
+          <td><span style="color:${p.parityDrift === 0 ? '#10b981' : '#f59e0b'}; font-weight:600;">${p.parityDrift === 0 ? '0 blocks (0.00%)' : `+${p.parityDrift} blocks`}</span></td>
+          <td>
+            <span class="step-tag" style="background:${p.syncStatus === 'SYNCHRONIZED' ? '#065f46' : '#991b1b'}; color:#fff; padding:3px 8px; border-radius:4px; font-weight:600;">
+              ${p.syncStatus}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Section 2: Consortium Nodes Table
+    if (nodesTbody && data.nodes) {
+      nodesTbody.innerHTML = data.nodes.map(n => `
+        <tr>
+          <td><code>${n.name}</code></td>
+          <td>${n.role}</td>
+          <td><code>${n.port || 'Internal'}</code></td>
+          <td>
+            <span class="step-tag" style="background:${n.status === 'HEALTHY' ? '#065f46' : '#991b1b'}; color:#fff; padding:3px 8px; border-radius:4px; font-weight:600;">
+              ${n.status}
+            </span>
+          </td>
+          <td style="color:#94a3b8; font-size:0.85rem;">${n.detail}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Section 3: Self-Healing Advice
+    if (adviceList && data.selfHealingAdvice) {
+      adviceList.innerHTML = data.selfHealingAdvice.map(a => {
+        const isOptimal = a.severity === 'OPTIMAL';
+        const color = isOptimal ? '#10b981' : (a.severity === 'HIGH' ? '#f59e0b' : '#ef4444');
+        const bg = isOptimal ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+
+        return `
+          <div class="advice-item" style="border-left: 4px solid ${color}; background: ${bg}; padding: 0.85rem; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <span style="background: ${color}; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">
+                ${a.severity}
+              </span>
+              <span style="color: #94a3b8; font-size: 0.8rem;">Component: <code>${a.component}</code></span>
+            </div>
+            <div style="color: #f8fafc; font-weight: 500; margin: 0.4rem 0;">${a.issue}</div>
+            <div style="font-size: 0.85rem; color: #cbd5e1; font-family: monospace; background: rgba(0,0,0,0.35); padding: 0.4rem 0.6rem; border-radius: 4px;">
+              💡 ${a.action}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'PROBE FAILED';
+    if (peersTbody) peersTbody.innerHTML = `<tr><td colspan="7" class="empty-hint" style="color:#ef4444;">Error probing peers: ${err.message}</td></tr>`;
+    if (nodesTbody) nodesTbody.innerHTML = `<tr><td colspan="5" class="empty-hint" style="color:#ef4444;">Error probing infrastructure: ${err.message}</td></tr>`;
+  }
+}

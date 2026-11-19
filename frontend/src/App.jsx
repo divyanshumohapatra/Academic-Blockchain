@@ -11,6 +11,7 @@ import AgenticModule from './components/AgenticModule';
 import FacultyPortal from './components/FacultyPortal';
 import FacultyAdvisorModule from './components/FacultyAdvisorModule';
 import ChatbotWidget from './components/ChatbotWidget';
+import TelemetryDashboard from './components/TelemetryDashboard';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -20,7 +21,8 @@ import {
   Building2,
   Bot,
   GraduationCap,
-  Users
+  Users,
+  Activity
 } from 'lucide-react';
 
 export default function App() {
@@ -110,6 +112,14 @@ export default function App() {
                 <Database size={16} />
                 Ledger Explorer
               </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'telemetry' ? 'active' : ''}`}
+                onClick={() => setActiveTab('telemetry')}
+              >
+                <Activity size={16} />
+                Health & Telemetry (6.2)
+              </button>
             </nav>
 
             {/* Tab Contents */}
@@ -149,6 +159,8 @@ export default function App() {
             )}
 
             {activeTab === 'ledger' && <LedgerExplorer />}
+
+            {activeTab === 'telemetry' && <TelemetryDashboard />}
           </>
         )}
       </main>

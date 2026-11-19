@@ -18,6 +18,7 @@ const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
 const { CertMintingMultiAgentEngine } = require('./agents/certMintingAgents');
 const sisDatabase = require('./db/sisDatabase');
+const healthAgent = require('./agents/healthAgent');
 
 const certMintingEngine = new CertMintingMultiAgentEngine();
 
@@ -51,6 +52,25 @@ app.get('/api/health', async (req, res) => {
         { name: 'Org3 - Administration & Verifier', msp: 'Org3MSP', peer: 'peer0.org3.academic.edu:9051' }
       ]
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Autonomous Health Monitoring Agent Telemetry & Parity (Contributor 6.2)
+app.get('/api/agent/health/telemetry', async (req, res) => {
+  try {
+    const telemetry = await healthAgent.getTelemetryReport();
+    res.json(telemetry);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/agent/health/sync-parity', async (req, res) => {
+  try {
+    const parity = await healthAgent.checkSyncParity();
+    res.json(parity);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
