@@ -1,0 +1,14 @@
+{
+  "name": "academic-blockchain-consortium",
+  "version": "2.0.0",
+  "description": "Hyperledger Fabric 2.5 Academic Credential Verification Consortium",
+  "scripts": {
+    "test:group1": "node test-group1.js",
+    "test:1.1": "node test-contributor-1-1.js",
+    "generate:pdfs": "node scripts/generate_pdf_reports.js",
+    "generate:html": "node scripts/generate_html_reports.js"
+  },
+  "devDependencies": {
+    "pdfkit": "^0.20.2"
+  }
+}
