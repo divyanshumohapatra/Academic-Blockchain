@@ -9,7 +9,9 @@ const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
-const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
+const { invokeChaincode, queryChaincode, checkNetworkHealth, getCertificateHistory, onLedgerEvent, getEventStatus } = require('./fabric');
+const { handleChatMessage } = require('./intentEngine');
+const { encryptData, decryptData } = require('./cryptoUtil');
 const { generateStudentDID, isValidStudentDID, signPayload, getActorSigningSecret } = require('./cryptoUtil');
 const facultyAuth = require('./facultyAuth');
 const orchestrator = require('./agents/orchestrator');
@@ -1867,6 +1869,177 @@ app.get('/api/agents/health', (req, res) => {
       { name: 'LedgerAnchorAgent', role: 'Hyperledger Fabric Multi-Org Ledger Notary', status: 'ONLINE', org: 'Consortium Notary' }
     ],
     timestamp: new Date().toISOString()
+  });
+});
+
+
+function resolveLedgerKeys(rawKey) {
+  if (!rawKey) return [];
+  const trimmed = rawKey.trim();
+  const candidates = [];
+  if (trimmed.startsWith('CERT_') || trimmed.startsWith('REQ_') || trimmed.startsWith('STUDENT_') || trimmed.startsWith('HASH_')) {
+    candidates.push(trimmed);
+  } else if (trimmed.toLowerCase().startsWith('cert-')) {
+    candidates.push('CERT_' + trimmed);
+    candidates.push(trimmed);
+  } else if (trimmed.toLowerCase().startsWith('req-')) {
+    candidates.push('REQ_' + trimmed);
+    candidates.push(trimmed);
+  } else if (trimmed.toLowerCase().startsWith('stu-')) {
+    candidates.push('STUDENT_' + trimmed);
+    candidates.push(trimmed);
+  } else {
+    candidates.push('CERT_CERT-' + trimmed);
+    candidates.push('REQ_REQ-' + trimmed);
+    candidates.push('STUDENT_' + trimmed);
+    candidates.push('CERT_' + trimmed);
+    candidates.push('REQ_' + trimmed);
+    candidates.push(trimmed);
+  }
+  return [...new Set(candidates)];
+}
+
+// ============================================================================
+// Group 5: Conversational AI Chatbot & Intent Engine (Contributor 5.2 / 5.3)
+// ============================================================================
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Field "message" (string) is required in request body.' });
+    }
+    const response = await handleChatMessage(message);
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// Group 5: Fabric History & Auditing with Traditional AES-256-GCM Encryption (Contributor 5.1)
+// Optional ?encrypt=true enables end-to-end symmetric payload encryption
+// ============================================================================
+app.get('/api/history/:key', async (req, res) => {
+  const rawKey = req.params.key;
+  const candidates = resolveLedgerKeys(rawKey);
+  const shouldEncrypt = req.query.encrypt === 'true' || req.headers['x-require-encryption'] === 'true';
+
+  try {
+    let resolvedKey = rawKey;
+    let history = [];
+
+    for (const keyToTry of candidates) {
+      try {
+        const records = await getCertificateHistory(keyToTry);
+        if (Array.isArray(records) && records.length > 0) {
+          resolvedKey = keyToTry;
+          history = records;
+          break;
+        }
+      } catch (e) {}
+    }
+
+    if (history.length === 0 && candidates.length > 0) {
+      resolvedKey = candidates[0];
+      try {
+        const records = await getCertificateHistory(resolvedKey);
+        history = Array.isArray(records) ? records : [];
+      } catch (e) {
+        history = [];
+      }
+    }
+
+    let linkedRequestKey = null;
+    let requestHistory = null;
+    let linkedCertKey = null;
+    let certHistory = null;
+
+    if (history.length > 0) {
+      const latestVal = history[history.length - 1]?.value || history[0]?.value;
+      if (latestVal) {
+        if (latestVal.requestId) {
+          const reqId = latestVal.requestId;
+          linkedRequestKey = reqId.startsWith('REQ_') ? reqId : ('REQ_' + reqId);
+          try {
+            const reqHist = await getCertificateHistory(linkedRequestKey);
+            if (Array.isArray(reqHist) && reqHist.length > 0) {
+              requestHistory = reqHist;
+            }
+          } catch (e) {}
+        }
+        if (latestVal.certificateId) {
+          const cId = latestVal.certificateId;
+          linkedCertKey = cId.startsWith('CERT_') ? cId : ('CERT_' + cId);
+          try {
+            const cHist = await getCertificateHistory(linkedCertKey);
+            if (Array.isArray(cHist) && cHist.length > 0) {
+              certHistory = cHist;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    const payload = {
+      key: resolvedKey,
+      query: rawKey,
+      history,
+      linkedRequestKey,
+      requestHistory,
+      linkedCertKey,
+      certHistory
+    };
+
+    if (shouldEncrypt) {
+      return res.json({
+        encrypted: true,
+        data: encryptData(payload)
+      });
+    }
+
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: err.message, key: rawKey });
+  }
+});
+
+// Decrypt helper endpoint
+app.post('/api/crypto/decrypt', (req, res) => {
+  try {
+    const { encryptedPayload } = req.body;
+    if (!encryptedPayload) {
+      return res.status(400).json({ error: 'encryptedPayload is required' });
+    }
+    const decrypted = decryptData(encryptedPayload);
+    res.json({ decrypted });
+  } catch (err) {
+    res.status(400).json({ error: 'Decryption failed: ' + err.message });
+  }
+});
+
+// ============================================================================
+// Group 5: Real-Time SSE Ledger Event Stream (Contributor 5.1 / 5.3)
+// ============================================================================
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const shouldEncrypt = req.query.encrypt === 'true';
+
+  const sendEvent = (event) => {
+    const payload = shouldEncrypt ? encryptData(event) : event;
+    res.write('data: ' + JSON.stringify(payload) + '\n\n');
+  };
+
+  const removeListener = onLedgerEvent(sendEvent);
+  const readyData = JSON.stringify({ status: 'CONNECTED', encryption: shouldEncrypt ? 'AES-256-GCM' : 'NONE' });
+  res.write('event: ready\ndata: ' + readyData + '\n\n');
+
+  req.on('close', () => {
+    removeListener();
+    res.end();
   });
 });
 
