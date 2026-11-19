@@ -10,20 +10,32 @@ import {
   User, 
   Activity,
   Copy,
-  Check
+  Check,
+  RotateCcw
 } from 'lucide-react';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
+const STORAGE_KEY = 'academic_blockchain_chat_history_v1';
+
+const DEFAULT_WELCOME = {
+  id: 'welcome',
+  sender: 'bot',
+  text: '👋 Hello! I am your **Academic Blockchain AI Assistant**. You can ask me to check certificate status, trace multi-organization approval history, lookup student roll numbers, or answer general questions regarding consensus, IPFS, and consortium security.',
+  time: new Date().toLocaleTimeString()
+};
 
 export default function ChatbotPortal() {
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome',
-      sender: 'bot',
-      text: '👋 Hello! I am your **Academic Blockchain AI Assistant**. You can ask me to check certificate status, trace multi-organization approval history, or identify which authority signed off on an academic milestone.',
-      time: new Date().toLocaleTimeString()
-    }
-  ]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [DEFAULT_WELCOME];
+  });
+
   const [inputVal, setInputVal] = useState('');
   const [loading, setLoading] = useState(false);
   const [copiedTx, setCopiedTx] = useState(null);
@@ -36,6 +48,20 @@ export default function ChatbotPortal() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  // Persist conversation across tab switches & page refreshes
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch (e) {}
+  }, [messages]);
+
+  const handleClearChat = () => {
+    setMessages([DEFAULT_WELCOME]);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {}
+  };
 
   const sendMessage = async (textOverride) => {
     const textToSend = (textOverride || inputVal).trim();
@@ -88,10 +114,12 @@ export default function ChatbotPortal() {
   };
 
   const quickPrompts = [
+    "status of this roll number student STU-2024-35",
     "What is the status of CERT-101?",
     "Show me the history of CERT-101",
     "Who approved CERT-101?",
-    "What stage is CERT-103 in right now?",
+    "Explain Raft consensus",
+    "How does IPFS work?",
     "What can you do?"
   ];
 
@@ -133,6 +161,27 @@ export default function ChatbotPortal() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <button
+            onClick={handleClearChat}
+            title="Clear Chat History"
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '20px',
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontWeight: 500
+            }}
+          >
+            <RotateCcw size={12} />
+            Clear
+          </button>
+
           <span style={{
             background: 'rgba(16, 185, 129, 0.1)',
             border: '1px solid rgba(16, 185, 129, 0.3)',
@@ -208,7 +257,7 @@ export default function ChatbotPortal() {
         border: '1px solid var(--border-color)',
         borderRadius: 'var(--radius-md)',
         padding: '1.25rem',
-        height: '420px',
+        height: '460px',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
@@ -220,7 +269,7 @@ export default function ChatbotPortal() {
             key={msg.id}
             style={{
               alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '82%',
+              maxWidth: '85%',
               display: 'flex',
               flexDirection: 'column',
               gap: '0.25rem'
@@ -322,7 +371,7 @@ export default function ChatbotPortal() {
           type="text"
           value={inputVal}
           onChange={(e) => setInputVal(e.target.value)}
-          placeholder="Ask about CERT-101, approval history, or approver identity..."
+          placeholder="Ask about student STU-2024-35, CERT-101, Raft consensus, IPFS, or AES encryption..."
           style={{
             flex: 1,
             background: '#090e1a',

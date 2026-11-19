@@ -159,7 +159,10 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'chatbot' && <ChatbotPortal />}
+            {/* Chatbot Tab with continuous state persistence across tab switches */}
+            <div style={{ display: activeTab === 'chatbot' ? 'block' : 'none' }}>
+              <ChatbotPortal />
+            </div>
 
             {activeTab === 'students' && <StudentModule />}
 
