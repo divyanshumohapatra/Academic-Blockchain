@@ -8,6 +8,8 @@
 
 require('dotenv').config();
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const r2 = require('./src/r2');
 const { ROLES, login, quickLoginByRole, requireRole, DEMO_ACCOUNTS } = require('./src/auth');
 const app = require('./src/server');
@@ -557,6 +559,91 @@ async function runTests() {
     } catch (err) {
       report('Specialized RBAC Tests', false, err.message);
     }
+
+    // ==========================================
+    // 6. Employer Portal Multi-Tiered Verification Suite
+    // ==========================================
+    console.log('\n--- 6. Employer Portal Multi-Tiered Verification Suite ---');
+    try {
+      const { calculateSHA256 } = require('./src/ipfs');
+      const testCertPath = path.join(__dirname, 'storage/certificates/CERT-2024-001.pdf');
+      const testCertBuffer = fs.readFileSync(testCertPath);
+      const testCertHash = calculateSHA256(testCertBuffer).toLowerCase();
+
+      // 6.1 Verification by exact SHA-256 binary hash
+      const hashVerifyRes = await fetch(`${baseUrl}/api/verify/hash/${testCertHash}`);
+      const hashVerifyData = await hashVerifyRes.json();
+      report(
+        'Verify Approved Certificate by SHA-256 Hash',
+        hashVerifyData.verified === true &&
+        hashVerifyData.verificationStatus === 'VERIFIED' &&
+        hashVerifyData.certificate &&
+        hashVerifyData.certificate.certId === 'CERT-2024-001' &&
+        Boolean(hashVerifyData.certificate.studentName) &&
+        Boolean(hashVerifyData.certificate.docHash),
+        `Status: ${hashVerifyData.verificationStatus}, Student: ${hashVerifyData.certificate?.studentName}`
+      );
+
+      // 6.2 Verification with invalid SHA-256 hash correctly rejects
+      const fakeHash = '0000000000000000000000000000000000000000000000000000000000000000';
+      const fakeHashRes = await fetch(`${baseUrl}/api/verify/hash/${fakeHash}`);
+      const fakeHashData = await fakeHashRes.json();
+      report(
+        'Reject Unanchored / Invalid Certificate Hash',
+        fakeHashData.verified === false && fakeHashData.verificationStatus === 'INVALID',
+        `Status: ${fakeHashData.verificationStatus}`
+      );
+
+      // 6.3 Verification by Certificate ID
+      const idVerifyRes = await fetch(`${baseUrl}/api/verify/id/CERT-2024-001`);
+      const idVerifyData = await idVerifyRes.json();
+      report(
+        'Verify Approved Certificate by Certificate ID',
+        idVerifyData.verified === true &&
+        idVerifyData.verificationStatus === 'VERIFIED' &&
+        idVerifyData.certificate &&
+        idVerifyData.certificate.certId === 'CERT-2024-001',
+        `Status: ${idVerifyData.verificationStatus}`
+      );
+
+      // 6.4 Verification by Student DID
+      const didVerifyRes = await fetch(`${baseUrl}/api/verify/did/did:academic:a038a2bdb75e4eca20c7efcf34c62fa57f7bd1be`);
+      const didVerifyData = await didVerifyRes.json();
+      report(
+        'Verify Approved Certificate by Student DID',
+        didVerifyData.verified === true &&
+        didVerifyData.verificationStatus === 'VERIFIED' &&
+        didVerifyData.certificate &&
+        Boolean(didVerifyData.certificate.certId),
+        `Status: ${didVerifyData.verificationStatus}, CertId: ${didVerifyData.certificate?.certId}`
+      );
+
+      // 6.5 Verification via File Upload (/api/verify/file)
+      const FormData = require('form-data');
+      const form = new FormData();
+      form.append('certificate', testCertBuffer, {
+        filename: 'CERT-2024-001.pdf',
+        contentType: 'application/pdf'
+      });
+
+      const fileVerifyRes = await fetch(`${baseUrl}/api/verify/file`, {
+        method: 'POST',
+        headers: form.getHeaders(),
+        body: form.getBuffer()
+      });
+      const fileVerifyData = await fileVerifyRes.json();
+      report(
+        'Verify Approved Certificate by Direct File Upload (/api/verify/file)',
+        fileVerifyData.verified === true &&
+        fileVerifyData.verificationStatus === 'VERIFIED' &&
+        fileVerifyData.certificate &&
+        fileVerifyData.certificate.certId === 'CERT-2024-001',
+        `Status: ${fileVerifyData.verificationStatus}, CertId: ${fileVerifyData.certificate?.certId}`
+      );
+    } catch (err) {
+      report('Employer Portal Multi-Tiered Verification Suite', false, err.message);
+    }
+
 
   } finally {
     if (server) {
