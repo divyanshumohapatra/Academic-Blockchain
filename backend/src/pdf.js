@@ -3,6 +3,7 @@
 const os = require('os');
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
+const { generateStudentDID } = require('./cryptoUtil');
 
 /**
  * Get host address accessible from mobile phones on the same Wi-Fi network.
@@ -275,20 +276,20 @@ async function generateCertificatePDF(certData) {
       // ==========================================
       // 1. Institution Header & Subtitles
       // ==========================================
-      let currY = 38;
+      let currY = 42;
 
       doc.font('Helvetica-Bold')
          .fontSize(22)
          .fillColor('#1e3a8a')
          .text('NATIONAL INSTITUTE OF TECHNOLOGY WARANGAL', 40, currY, { width: contentWidth, align: 'center', characterSpacing: 0.5 });
 
-      currY += 24;
+      currY += 26;
       doc.fontSize(9.5)
          .font('Helvetica-Bold')
          .fillColor('#b45309')
          .text('An Institute of National Importance • Established by MHRD, Govt. of India (1959)', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 15;
+      currY += 16;
       doc.fontSize(9)
          .font('Helvetica')
          .fillColor('#64748b')
@@ -297,17 +298,17 @@ async function generateCertificatePDF(certData) {
       currY += 18;
       // Ornamental dividing line with center diamond
       doc.save();
-      doc.moveTo(width / 2 - 180, currY).lineTo(width / 2 + 180, currY).lineWidth(0.8).strokeColor('#d97706').stroke();
+      doc.moveTo(width / 2 - 200, currY).lineTo(width / 2 + 200, currY).lineWidth(0.8).strokeColor('#d97706').stroke();
       doc.rect(width / 2 - 3, currY - 3, 6, 6).fillColor('#1e3a8a').fill();
       doc.restore();
 
-      currY += 14;
+      currY += 16;
       doc.fontSize(16.5)
          .font('Helvetica-Bold')
          .fillColor('#0f172a')
          .text('CERTIFICATE OF DEGREE CONFERMENT', 40, currY, { width: contentWidth, align: 'center', characterSpacing: 1.2 });
 
-      currY += 16;
+      currY += 18;
       doc.fontSize(8.5)
          .font('Helvetica-Oblique')
          .fillColor('#64748b')
@@ -316,54 +317,79 @@ async function generateCertificatePDF(certData) {
       // ==========================================
       // 2. Candidate & Degree Body
       // ==========================================
-      currY += 22;
+      currY += 26;
       doc.fontSize(11.5)
          .font('Helvetica')
          .fillColor('#334155')
          .text('The Senate of the National Institute of Technology Warangal hereby certifies that', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 17;
+      currY += 22;
       // Student Name with prominent styling
-      doc.fontSize(21)
+      doc.fontSize(22)
          .font('Helvetica-Bold')
          .fillColor('#1e3a8a')
          .text(certData.studentName || 'Student Name', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 23;
+      currY += 26;
+      // Registration / Roll Number with explicit horizontal centering and zero collision
+      const rollLabel = 'bearing Registration / Roll Number:  ';
+      const rollVal = certData.studentId || 'N/A';
+      doc.font('Helvetica').fontSize(11);
+      const rollLabelWidth = doc.widthOfString(rollLabel);
+      doc.font('Helvetica-Bold').fontSize(11);
+      const rollValWidth = doc.widthOfString(rollVal);
+      const rollStartX = (width - (rollLabelWidth + rollValWidth)) / 2;
+
+      doc.font('Helvetica').fontSize(11).fillColor('#334155')
+         .text(rollLabel, rollStartX, currY, { lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#0f172a')
+         .text(rollVal, rollStartX + rollLabelWidth, currY, { lineBreak: false });
+
+      currY += 20;
+      // Decentralized Identifier (DID) with explicit horizontal centering and zero collision
+      const studentDid = certData.studentDid || (certData.studentId ? generateStudentDID(certData.studentName || 'Student', certData.studentId) : 'N/A');
+      const didLabel = 'Decentralized Identifier (DID):  ';
+      const didVal = studentDid;
+      doc.font('Helvetica').fontSize(8.5);
+      const didLabelWidth = doc.widthOfString(didLabel);
+      doc.font('Courier-Bold').fontSize(8.5);
+      const didValWidth = doc.widthOfString(didVal);
+      const didStartX = (width - (didLabelWidth + didValWidth)) / 2;
+
+      doc.font('Helvetica').fontSize(8.5).fillColor('#64748b')
+         .text(didLabel, didStartX, currY, { lineBreak: false });
+      doc.font('Courier-Bold').fontSize(8.5).fillColor('#1e3a8a')
+         .text(didVal, didStartX + didLabelWidth, currY, { lineBreak: false });
+
+      currY += 24;
       doc.fontSize(11)
          .font('Helvetica')
          .fillColor('#334155')
-         .text(`bearing Registration / Roll Number: `, 40, currY, { width: contentWidth, align: 'center', continued: true })
-         .font('Helvetica-Bold')
-         .fillColor('#0f172a')
-         .text(`${certData.studentId || 'N/A'}`);
+         .text('having fulfilled all prescribed academic regulations and credit requirements in the', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 16;
-      doc.fontSize(11)
-         .font('Helvetica')
-         .fillColor('#334155')
-         .text(`having fulfilled all prescribed academic regulations and credit requirements in the`, 40, currY, { width: contentWidth, align: 'center' });
-
-      currY += 15;
-      doc.fontSize(12)
+      currY += 18;
+      // Clean duplicate "Department of" if already present
+      const rawDept = certData.department || 'Computer Science & Engineering';
+      const cleanDept = rawDept.replace(/^Department of\s+/i, '').trim();
+      doc.fontSize(13)
          .font('Helvetica-Bold')
          .fillColor('#1e3a8a')
-         .text(`Department of ${certData.department || 'Computer Science & Engineering'}`, 40, currY, { width: contentWidth, align: 'center' });
+         .text(`Department of ${cleanDept}`, 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 15;
+      currY += 18;
       doc.fontSize(11)
          .font('Helvetica')
          .fillColor('#334155')
          .text('has been officially admitted to the award of the degree of', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 18;
-      // Degree Title in prominent highlight box or font
+      currY += 20;
+      // Degree Title in prominent highlight font
       doc.fontSize(16.5)
          .font('Helvetica-Bold')
          .fillColor('#0284c7')
          .text(certData.certType || 'Master of Computer Applications (MCA)', 40, currY, { width: contentWidth, align: 'center' });
 
-      currY += 17;
+      currY += 18;
       doc.fontSize(10)
          .font('Helvetica-Oblique')
          .fillColor('#475569')
@@ -389,46 +415,44 @@ async function generateCertificatePDF(certData) {
       }
 
       // ==========================================
-      // 4. Institutional Senate Seal (Center-Bottom)
+      // 4. Institutional Senate Seal (Centered gracefully above signatures)
       // ==========================================
-      const sigLineY = height - 90;
-      drawInstitutionalSeal(doc, width / 2, sigLineY - 14, 28);
+      const sigLineY = height - 88;
+      const sealCenterY = sigLineY - 92;
+      drawInstitutionalSeal(doc, width / 2, sealCenterY, 25);
 
       // ==========================================
-      // 5. Signatures with Clean Lines & Labels
+      // 5. Signatures with Clean Lines & Labels (No overlap with seal)
       // ==========================================
       const sig1X = 65;
-      const sig2X = width / 2 - 70; // used for seal or center
       const sig3X = width - 215;
+      const examX = width / 2 - 75;
 
       // Org 1: HOD CSE Signature (Left)
       drawHODSignature(doc, sig1X, sigLineY - 10);
       doc.moveTo(sig1X, sigLineY).lineTo(sig1X + 150, sigLineY).lineWidth(0.8).strokeColor('#94a3b8').stroke();
-      doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a').text('Prof. K. V. Rao', sig1X, sigLineY + 6, { width: 150, align: 'center' });
-      doc.fontSize(8).font('Helvetica').fillColor('#334155').text('Head of Department (CSE)', sig1X, sigLineY + 18, { width: 150, align: 'center' });
-      doc.fontSize(7).fillColor('#64748b').text('Org 1: Academic Authority', sig1X, sigLineY + 28, { width: 150, align: 'center' });
+      doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a').text('Prof. K. V. Rao', sig1X, sigLineY + 5, { width: 150, align: 'center' });
+      doc.fontSize(8).font('Helvetica').fillColor('#334155').text('Head of Department (CSE)', sig1X, sigLineY + 17, { width: 150, align: 'center' });
+      doc.fontSize(7).fillColor('#64748b').text('Org 1: Academic Authority', sig1X, sigLineY + 27, { width: 150, align: 'center' });
 
-      // Org 2: Exam Controller Signature (Center-Left / Below Seal or Center)
-      // We place Org 2 and Org 3 symmetrically
-      const examX = width / 2 - 75;
-      // Draw signature slightly above line
+      // Org 2: Exam Controller Signature (Center, cleanly below seal)
       drawExamControllerSignature(doc, examX, sigLineY - 10);
       doc.moveTo(examX, sigLineY).lineTo(examX + 150, sigLineY).lineWidth(0.8).strokeColor('#94a3b8').stroke();
-      doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a').text('Prof. S. R. Murthy', examX, sigLineY + 6, { width: 150, align: 'center' });
-      doc.fontSize(8).font('Helvetica').fillColor('#334155').text('Controller of Examinations', examX, sigLineY + 18, { width: 150, align: 'center' });
-      doc.fontSize(7).fillColor('#64748b').text('Org 2: Evaluation Authority', examX, sigLineY + 28, { width: 150, align: 'center' });
+      doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a').text('Prof. S. R. Murthy', examX, sigLineY + 5, { width: 150, align: 'center' });
+      doc.fontSize(8).font('Helvetica').fillColor('#334155').text('Controller of Examinations', examX, sigLineY + 17, { width: 150, align: 'center' });
+      doc.fontSize(7).fillColor('#64748b').text('Org 2: Evaluation Authority', examX, sigLineY + 27, { width: 150, align: 'center' });
 
       // Org 3: Dean / Registrar Signature (Right)
       drawDeanSignature(doc, sig3X, sigLineY - 10);
       doc.moveTo(sig3X, sigLineY).lineTo(sig3X + 150, sigLineY).lineWidth(0.8).strokeColor('#94a3b8').stroke();
-      doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a').text('Prof. P. Chandrasekhar', sig3X, sigLineY + 6, { width: 150, align: 'center' });
-      doc.fontSize(8).font('Helvetica').fillColor('#334155').text('Dean (Academic) & Registrar', sig3X, sigLineY + 18, { width: 150, align: 'center' });
-      doc.fontSize(7).fillColor('#64748b').text('Org 3: Central Governance', sig3X, sigLineY + 28, { width: 150, align: 'center' });
+      doc.fontSize(9.5).font('Helvetica-Bold').fillColor('#0f172a').text('Prof. P. Chandrasekhar', sig3X, sigLineY + 5, { width: 150, align: 'center' });
+      doc.fontSize(8).font('Helvetica').fillColor('#334155').text('Dean (Academic) & Registrar', sig3X, sigLineY + 17, { width: 150, align: 'center' });
+      doc.fontSize(7).fillColor('#64748b').text('Org 3: Central Governance', sig3X, sigLineY + 27, { width: 150, align: 'center' });
 
       // ==========================================
       // 6. Verification Footnote & Ledger Metadata
       // ==========================================
-      const footerY = height - 42;
+      const footerY = height - 44;
       doc.fontSize(7.5)
          .font('Helvetica')
          .fillColor('#475569')

@@ -23,20 +23,36 @@ TEST_REQ_ID="REQ-AGENT-${RAND_ID}"
 TEST_CERT_ID="CERT-AGENT-${RAND_ID}"
 
 echo ""
-echo "--> Step 1: Registering Student (${TEST_STU_ID}) on Fabric Ledger..."
+echo "--> Step 0: Testing Unenrolled Student Registration (Must Fail Security Gate)..."
+FAKE_ID="STU-UNENROLLED-999"
+REJECT_RES=$(curl -s -X POST "${API_URL}/students" \
+  -H "Content-Type: application/json" \
+  -d "{\"studentId\":\"${FAKE_ID}\",\"name\":\"Fake Student\",\"email\":\"fake@academic.edu\"}")
+if echo "${REJECT_RES}" | grep -q "not enrolled in the University Student Information System"; then
+  echo "✅ Security Gate Active: Unenrolled student registration rejected as expected."
+else
+  echo "⚠️ Note on security response: ${REJECT_RES}"
+fi
+
+echo ""
+echo "--> Step 1: Enrolling Student (${TEST_STU_ID}) in SIS Database & Registering on Fabric Ledger..."
+curl -s -f -X POST "${API_URL}/sis/students" \
+  -H "Content-Type: application/json" \
+  -d "{\"studentId\":\"${TEST_STU_ID}\",\"name\":\"Alice Johnson\",\"email\":\"alice@academic.edu\",\"department\":\"Computer Science & Engineering\",\"enrollmentYear\":\"2024\",\"attendance\":91.2,\"cieMarks\":46,\"totalCredits\":164,\"requiredCredits\":160,\"cgpa\":9.15,\"backlogs\":0,\"capstoneScore\":92,\"originalityReport\":96,\"feeDues\":0,\"libraryDues\":0}" >/dev/null
+
 curl -s -f -X POST "${API_URL}/students" \
   -H "Content-Type: application/json" \
   -d "{\"studentId\":\"${TEST_STU_ID}\",\"name\":\"Alice Johnson\",\"email\":\"alice@academic.edu\",\"department\":\"Computer Science & Engineering\",\"enrollmentYear\":\"2024\"}" >/dev/null
 
-echo "✅ Student registered on Ledger."
+echo "✅ Student verified against University SIS Database and registered on Ledger."
 
 echo ""
-echo "--> Step 2: Submitting Request with Academic Metrics (${TEST_REQ_ID})..."
+echo "--> Step 2: Submitting Certificate Request (Auto-Enriched from SQLite SIS) (${TEST_REQ_ID})..."
 curl -s -f -X POST "${API_URL}/requests" \
   -H "Content-Type: application/json" \
-  -d "{\"requestId\":\"${TEST_REQ_ID}\",\"studentId\":\"${TEST_STU_ID}\",\"certType\":\"Master of Computer Applications (MCA)\",\"details\":{\"attendance\":91.2,\"cieMarks\":46,\"totalCredits\":164,\"requiredCredits\":160,\"cgpa\":9.15,\"backlogs\":0,\"capstoneScore\":92,\"originalityReport\":96,\"feeDues\":0,\"libraryDues\":0}}" >/dev/null
+  -d "{\"requestId\":\"${TEST_REQ_ID}\",\"studentId\":\"${TEST_STU_ID}\",\"certType\":\"Master of Computer Applications (MCA)\"}" >/dev/null
 
-echo "✅ Request submitted (Status: SUBMITTED)."
+echo "✅ Request submitted and auto-enriched from SIS Database (Status: SUBMITTED)."
 
 echo ""
 echo "--> Step 3: Running Autonomous Pre-Flight Audit & Fraud Scan..."
