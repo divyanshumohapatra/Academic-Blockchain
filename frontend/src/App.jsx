@@ -10,7 +10,7 @@ import LedgerExplorer from './components/LedgerExplorer';
 import AgenticModule from './components/AgenticModule';
 import FacultyPortal from './components/FacultyPortal';
 import FacultyAdvisorModule from './components/FacultyAdvisorModule';
-import Group5AssistantHub from './components/Group5AssistantHub';
+import ChatbotPortal from './components/ChatbotPortal';
 import ChatbotWidget from './components/ChatbotWidget';
 import { 
   ClipboardList, 
@@ -22,12 +22,12 @@ import {
   Bot,
   GraduationCap,
   Users,
-  MessageSquareCode
+  MessageSquare
 } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('consortium'); // 'consortium' | 'employer'
-  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'faculty', 'advisor', 'agents', 'group5', 'students', 'revoke', 'ledger'
+  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'faculty', 'advisor', 'agents', 'chatbot', 'students', 'revoke', 'ledger'
   const [activeRequestId, setActiveRequestId] = useState('REQ-2024-001');
   const [readyRequest, setReadyRequest] = useState(null);
 
@@ -89,19 +89,19 @@ export default function App() {
                 🤖 Autonomous Multi-Agent AI
               </button>
 
-              {/* Group 5 Dedicated Feature Tab */}
+              {/* Chatbot Tab - Clean, No Group 5 mention */}
               <button 
-                className={`tab-btn ${activeTab === 'group5' ? 'active' : ''}`}
-                onClick={() => setActiveTab('group5')}
+                className={`tab-btn ${activeTab === 'chatbot' ? 'active' : ''}`}
+                onClick={() => setActiveTab('chatbot')}
                 style={{
-                  background: activeTab === 'group5' ? 'linear-gradient(135deg, #4f46e5, #0284c7)' : 'rgba(79, 70, 229, 0.08)',
+                  background: activeTab === 'chatbot' ? 'linear-gradient(135deg, #4f46e5, #0284c7)' : 'rgba(79, 70, 229, 0.08)',
                   borderColor: 'rgba(79, 70, 229, 0.3)',
-                  color: activeTab === 'group5' ? '#ffffff' : '#4f46e5',
+                  color: activeTab === 'chatbot' ? '#ffffff' : '#4f46e5',
                   fontWeight: '700'
                 }}
               >
-                <MessageSquareCode size={16} />
-                💬 Group 5: AI Assistant & Events
+                <MessageSquare size={16} />
+                Chatbot
               </button>
 
               <button 
@@ -159,7 +159,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'group5' && <Group5AssistantHub />}
+            {activeTab === 'chatbot' && <ChatbotPortal />}
 
             {activeTab === 'students' && <StudentModule />}
 
