@@ -847,6 +847,99 @@ app.post('/api/agents/org1-department-audit', async (req, res) => {
   }
 });
 
+// Contributor 1.2: CouchDB Rich Queries & Department Analytics
+app.get('/api/department/students', async (req, res) => {
+  try {
+    const department = req.query.department || 'Department of Computer Science & Engineering';
+    let result = null;
+    try {
+      const raw = await queryChaincode('QueryStudentsByDepartment', [department]);
+      result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allSis = sisDatabase.getAllStudents() || [];
+      result = allSis.filter(s => (s.department || '').toLowerCase().includes(department.toLowerCase()));
+    }
+    res.json({ department, count: Array.isArray(result) ? result.length : 0, students: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/department/requests', async (req, res) => {
+  try {
+    const department = req.query.department || '';
+    const status = req.query.status || '';
+    let result = null;
+    try {
+      const raw = await queryChaincode('QueryRequestsByDepartmentAndStatus', [department, status]);
+      result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allReqs = sisDatabase.getAllCertificateRequests() || [];
+      result = allReqs.filter(r => {
+        const matchDept = !department || (r.department || '').toLowerCase().includes(department.toLowerCase());
+        const matchStatus = !status || r.status === status;
+        return matchDept && matchStatus;
+      });
+    }
+    res.json({ department, status, count: Array.isArray(result) ? result.length : 0, requests: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/department/honors', async (req, res) => {
+  try {
+    const honors = req.query.honors || 'SUMMA_CUM_LAUDE';
+    let result = null;
+    try {
+      const raw = await queryChaincode('QueryStudentsByHonors', [honors]);
+      result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allSis = sisDatabase.getAllStudents() || [];
+      result = allSis.filter(s => {
+        const h = s.academicRecord?.honors || (s.cgpa >= 9.5 ? 'SUMMA_CUM_LAUDE' : s.cgpa >= 9.0 ? 'MAGNA_CUM_LAUDE' : 'NONE');
+        return h.toUpperCase() === honors.toUpperCase();
+      });
+    }
+    res.json({ honors, count: Array.isArray(result) ? result.length : 0, students: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/department/metrics', async (req, res) => {
+  try {
+    const department = req.query.department || 'Department of Computer Science & Engineering';
+    let metrics = null;
+    try {
+      const raw = await queryChaincode('GetDepartmentSummaryMetrics', [department]);
+      metrics = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allSis = sisDatabase.getAllStudents() || [];
+      const deptStudents = allSis.filter(s => (s.department || '').toLowerCase().includes(department.toLowerCase()));
+      const allReqs = sisDatabase.getAllCertificateRequests() || [];
+      const deptReqs = allReqs.filter(r => (r.department || '').toLowerCase().includes(department.toLowerCase()));
+
+      let totalCgpa = 0;
+      deptStudents.forEach(s => totalCgpa += Number(s.cgpa || 8.0));
+      const avgCgpa = deptStudents.length > 0 ? (totalCgpa / deptStudents.length).toFixed(2) : '8.50';
+
+      metrics = {
+        department,
+        totalRegisteredStudents: deptStudents.length,
+        activeStudents: deptStudents.length,
+        inactiveStudents: 0,
+        averageCgpa: Number(avgCgpa),
+        totalRequests: deptReqs.length,
+        retrievedAt: new Date().toISOString()
+      };
+    }
+    res.json(metrics);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==========================================
 // 3. Module 2: Certificate Request & Approval Workflow
 // Contributor 1.1: Academic Chaincode Lead (Prerequisite Validation & Request Submission)

@@ -1029,6 +1029,143 @@ class AcademicContract extends Contract {
     await iterator.close();
     return JSON.stringify(results);
   }
+
+  // =======================================================
+  // Contributor 1.2: CouchDB Rich Queries & Department State Analytics
+  // =======================================================
+
+  async QueryStudentsByDepartment(ctx, department) {
+    if (!department || typeof department !== 'string') {
+      throw new Error('department is required and must be a string');
+    }
+    const cleanDept = department.trim();
+    const queryString = {
+      selector: {
+        docType: 'student',
+        department: cleanDept
+      }
+    };
+    return await this._getQueryResultForQueryString(ctx, JSON.stringify(queryString), 'STUDENT_', (s) => {
+      return (s.department || '').toLowerCase().includes(cleanDept.toLowerCase());
+    });
+  }
+
+  async QueryRequestsByDepartmentAndStatus(ctx, department, status) {
+    const cleanDept = (department || '').trim();
+    const cleanStatus = (status || '').trim();
+    const selector = { docType: 'certificateRequest' };
+    if (cleanDept) selector.department = cleanDept;
+    if (cleanStatus) selector.status = cleanStatus;
+
+    const queryString = { selector };
+    return await this._getQueryResultForQueryString(ctx, JSON.stringify(queryString), 'REQ_', (r) => {
+      const matchDept = !cleanDept || (r.department || '').toLowerCase().includes(cleanDept.toLowerCase());
+      const matchStatus = !cleanStatus || r.status === cleanStatus;
+      return matchDept && matchStatus;
+    });
+  }
+
+  async QueryStudentsByHonors(ctx, honors) {
+    if (!honors || typeof honors !== 'string') {
+      throw new Error('honors is required (e.g. SUMMA_CUM_LAUDE, MAGNA_CUM_LAUDE, CUM_LAUDE, DEANS_LIST)');
+    }
+    const cleanHonors = honors.trim().toUpperCase();
+    const queryString = {
+      selector: {
+        docType: 'student',
+        'academicRecord.honors': cleanHonors
+      }
+    };
+    return await this._getQueryResultForQueryString(ctx, JSON.stringify(queryString), 'STUDENT_', (s) => {
+      const rec = s.academicRecord || {};
+      return (rec.honors || '').toUpperCase() === cleanHonors;
+    });
+  }
+
+  async GetDepartmentSummaryMetrics(ctx, department) {
+    const cleanDept = (department || 'Computer Science & Engineering').trim();
+    const studentsRaw = await this.QueryStudentsByDepartment(ctx, cleanDept);
+    const students = JSON.parse(studentsRaw);
+
+    const requestsRaw = await this.QueryRequestsByDepartmentAndStatus(ctx, cleanDept, '');
+    const requests = JSON.parse(requestsRaw);
+
+    let totalCgpa = 0;
+    let validCgpaCount = 0;
+    let activeStudents = 0;
+    const honorsBreakdown = {
+      SUMMA_CUM_LAUDE: 0,
+      MAGNA_CUM_LAUDE: 0,
+      CUM_LAUDE: 0,
+      DEANS_LIST: 0,
+      NONE: 0
+    };
+
+    students.forEach(s => {
+      if (s.status === 'ACTIVE') activeStudents++;
+      const rec = s.academicRecord || {};
+      if (rec.cgpa && !isNaN(rec.cgpa)) {
+        totalCgpa += Number(rec.cgpa);
+        validCgpaCount++;
+      }
+      const h = (rec.honors || 'NONE').toUpperCase();
+      if (honorsBreakdown[h] !== undefined) {
+        honorsBreakdown[h]++;
+      } else {
+        honorsBreakdown.NONE++;
+      }
+    });
+
+    const requestsByStatus = {};
+    requests.forEach(r => {
+      requestsByStatus[r.status] = (requestsByStatus[r.status] || 0) + 1;
+    });
+
+    const avgCgpa = validCgpaCount > 0 ? (totalCgpa / validCgpaCount).toFixed(2) : '0.00';
+
+    return JSON.stringify({
+      department: cleanDept,
+      totalRegisteredStudents: students.length,
+      activeStudents,
+      inactiveStudents: students.length - activeStudents,
+      averageCgpa: Number(avgCgpa),
+      honorsBreakdown,
+      totalRequests: requests.length,
+      requestsByStatus,
+      retrievedAt: this._getTxTimestamp(ctx)
+    });
+  }
+
+  async _getQueryResultForQueryString(ctx, queryString, fallbackPrefix, fallbackFilter) {
+    if (ctx.stub.getQueryResult && typeof ctx.stub.getQueryResult === 'function') {
+      try {
+        const iterator = await ctx.stub.getQueryResult(queryString);
+        const results = [];
+        let result = await iterator.next();
+        while (!result.done) {
+          if (result.value && result.value.value.toString()) {
+            try {
+              results.push(JSON.parse(result.value.value.toString('utf8')));
+            } catch (e) {
+              results.push(result.value.value.toString('utf8'));
+            }
+          }
+          result = await iterator.next();
+        }
+        await iterator.close();
+        if (results.length > 0) {
+          return JSON.stringify(results);
+        }
+      } catch (e) {
+        console.warn(`[CouchDB queryResult notice]: ${e.message}, falling back to prefix range scan`);
+      }
+    }
+
+    const allRecordsRaw = await this._queryByPrefix(ctx, fallbackPrefix);
+    const allRecords = JSON.parse(allRecordsRaw);
+    const filtered = fallbackFilter ? allRecords.filter(fallbackFilter) : allRecords;
+    return JSON.stringify(filtered);
+  }
 }
 
 module.exports = AcademicContract;
