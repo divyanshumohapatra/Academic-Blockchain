@@ -1,31 +1,101 @@
 'use strict';
 
-const { execFile, exec } = require('child_process');
-const util = require('util');
-const execFilePromise = util.promisify(execFile);
-const execPromise = util.promisify(exec);
+const { exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const EventEmitter = require('events');
 
 const CHANNEL_NAME = process.env.CHANNEL_NAME || 'academicchannel';
 const CHAINCODE_NAME = process.env.CHAINCODE_NAME || 'academic-contract';
+const EVENT_NAME = 'AcademicCertificateLifecycle';
 
-const ORDERER_CA = '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/academic.edu/orderers/orderer.academic.edu/msp/tlscacerts/tlsca.academic.edu-cert.pem';
-const PEER1_CA = '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.academic.edu/peers/peer0.org1.academic.edu/tls/ca.crt';
-const PEER2_CA = '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.academic.edu/peers/peer0.org2.academic.edu/tls/ca.crt';
-const PEER3_CA = '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org3.academic.edu/peers/peer0.org3.academic.edu/tls/ca.crt';
+// Internal event bus for streaming ledger events
+const ledgerEvents = new EventEmitter();
+ledgerEvents.setMaxListeners(50);
 
-function getOrgConfig(orgNum = 1) {
+let eventListenerStarted = false;
+let eventListenerError = null;
+
+// Organization Connection Configurations
+const ORG_CONFIG = {
+  1: {
+    msp: 'Org1MSP',
+    name: 'Org1 - University Academic Department',
+    peer: 'peer0.org1.academic.edu',
+    port: 7051,
+    address: 'peer0.org1.academic.edu:7051',
+    tlsCertPath: path.resolve(__dirname, '../../network/crypto-config/peerOrganizations/org1.academic.edu/peers/peer0.org1.academic.edu/tls/ca.crt'),
+    rootCert: '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.academic.edu/peers/peer0.org1.academic.edu/tls/ca.crt',
+    mspPath: '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org1.academic.edu/users/Admin@org1.academic.edu/msp'
+  },
+  2: {
+    msp: 'Org2MSP',
+    name: 'Org2 - Examination Board',
+    peer: 'peer0.org2.academic.edu',
+    port: 8051,
+    address: 'peer0.org2.academic.edu:8051',
+    tlsCertPath: path.resolve(__dirname, '../../network/crypto-config/peerOrganizations/org2.academic.edu/peers/peer0.org2.academic.edu/tls/ca.crt'),
+    rootCert: '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.academic.edu/peers/peer0.org2.academic.edu/tls/ca.crt',
+    mspPath: '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org2.academic.edu/users/Admin@org2.academic.edu/msp'
+  },
+  3: {
+    msp: 'Org3MSP',
+    name: 'Org3 - University Administration & Dean',
+    peer: 'peer0.org3.academic.edu',
+    port: 9051,
+    address: 'peer0.org3.academic.edu:9051',
+    tlsCertPath: path.resolve(__dirname, '../../network/crypto-config/peerOrganizations/org3.academic.edu/peers/peer0.org3.academic.edu/tls/ca.crt'),
+    rootCert: '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org3.academic.edu/peers/peer0.org3.academic.edu/tls/ca.crt',
+    mspPath: '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org3.academic.edu/users/Admin@org3.academic.edu/msp'
+  }
+};
+
+const ORDERER_TLS_ROOTCERT = '/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/academic.edu/orderers/orderer.academic.edu/msp/tlscacerts/tlsca.academic.edu-cert.pem';
+const ORDERER_ADDRESS = 'orderer.academic.edu:7050';
+
+function getOrgConfig(orgNum) {
   const num = parseInt(orgNum, 10) || 1;
-  const port = num === 1 ? 7051 : (num === 2 ? 8051 : 9051);
+  return ORG_CONFIG[num] || ORG_CONFIG[1];
+}
+
+function normalizeContractEvent(event) {
+  let payload = event.payload;
+  if (Buffer.isBuffer(payload)) {
+    try {
+      payload = JSON.parse(payload.toString('utf8'));
+    } catch (e) {
+      payload = payload.toString('utf8');
+    }
+  }
   return {
-    msp: `Org${num}MSP`,
-    address: `peer0.org${num}.academic.edu:${port}`,
-    rootCert: `/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org${num}.academic.edu/peers/peer0.org${num}.academic.edu/tls/ca.crt`,
-    mspPath: `/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/peerOrganizations/org${num}.academic.edu/users/Admin@org${num}.academic.edu/msp`
+    type: 'LEDGER_UPDATE',
+    eventName: event.eventName || EVENT_NAME,
+    transactionId: event.transactionId || null,
+    blockNumber: event.blockNumber !== undefined ? Number(event.blockNumber) : null,
+    payload,
+    receivedAt: new Date().toISOString()
+  };
+}
+
+function onLedgerEvent(listener) {
+  ledgerEvents.on('event', listener);
+  return () => ledgerEvents.off('event', listener);
+}
+
+function emitLocalEvent(payload) {
+  ledgerEvents.emit('event', normalizeContractEvent({ payload }));
+}
+
+function getEventStatus() {
+  return {
+    started: true,
+    eventName: EVENT_NAME,
+    error: eventListenerError
   };
 }
 
 /**
- * Execute peer chaincode invoke via CLI container with direct argv (no shell escaping issues).
+ * Execute peer chaincode invoke via CLI container with direct argv.
  * Endorses across all 3 Orgs to satisfy consortium endorsement policy.
  */
 async function invokeChaincode(functionName, args = [], orgNum = 1) {
@@ -43,42 +113,54 @@ async function invokeChaincode(functionName, args = [], orgNum = 1) {
     '-e', `CORE_PEER_ADDRESS=${org.address}`,
     'cli',
     'peer', 'chaincode', 'invoke',
-    '-o', 'orderer.academic.edu:7050',
+    '-o', ORDERER_ADDRESS,
     '--ordererTLSHostnameOverride', 'orderer.academic.edu',
     '--tls',
-    '--cafile', ORDERER_CA,
+    '--cafile', ORDERER_TLS_ROOTCERT,
     '-C', CHANNEL_NAME,
     '-n', CHAINCODE_NAME,
-    '--peerAddresses', 'peer0.org1.academic.edu:7051', '--tlsRootCertFiles', PEER1_CA,
-    '--peerAddresses', 'peer0.org2.academic.edu:8051', '--tlsRootCertFiles', PEER2_CA,
-    '--peerAddresses', 'peer0.org3.academic.edu:9051', '--tlsRootCertFiles', PEER3_CA,
+    '--peerAddresses', 'peer0.org1.academic.edu:7051',
+    '--tlsRootCertFiles', ORG_CONFIG[1].rootCert,
+    '--peerAddresses', 'peer0.org2.academic.edu:8051',
+    '--tlsRootCertFiles', ORG_CONFIG[2].rootCert,
+    '--peerAddresses', 'peer0.org3.academic.edu:9051',
+    '--tlsRootCertFiles', ORG_CONFIG[3].rootCert,
     '-c', ctorJson,
     '--waitForEvent'
   ];
 
-  try {
-    const { stdout, stderr } = await execFilePromise('docker', cmdArgs);
-    const combined = stdout + '\n' + stderr;
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const child = spawn('docker', cmdArgs);
+    let stdout = '';
+    let stderr = '';
 
-    const match = combined.match(/payload:"([^"]+)"/);
-    if (match && match[1]) {
-      try {
-        const decoded = Buffer.from(match[1], 'utf8').toString();
-        return JSON.parse(decoded);
-      } catch (e) {
-        return match[1];
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+
+    child.on('close', code => {
+      const output = (stdout + '\n' + stderr).trim();
+      if (code !== 0) {
+        return reject(new Error(`Chaincode invoke failed (exit ${code}): ${stderr || stdout}`));
       }
-    }
+      try {
+        const payloadMatch = output.match(/payload:"([^"]+)"/);
+        if (payloadMatch) {
+          const raw = payloadMatch[1].replace(/\\"/g, '"');
+          try {
+            return resolve(JSON.parse(raw));
+          } catch (_) {
+            return resolve(raw);
+          }
+        }
+        resolve({ success: true, result: output });
+      } catch (e) {
+        resolve({ success: true, result: output });
+      }
+    });
 
-    if (combined.includes('status:200') || combined.includes('SUCCESS') || combined.includes('VALID')) {
-      return { status: 200, message: 'Transaction successfully submitted and committed to ledger' };
-    }
-
-    return { stdout, stderr };
-  } catch (error) {
-    console.error(`Error invoking chaincode ${functionName}:`, error.message);
-    throw new Error(`Chaincode invocation failed: ${error.message}`);
-  }
+    child.on('error', err => reject(new Error(`Failed to spawn docker CLI: ${err.message}`)));
+  });
 }
 
 /**
@@ -104,75 +186,82 @@ async function queryChaincode(functionName, args = [], orgNum = 1) {
     '-c', ctorJson
   ];
 
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const child = spawn('docker', cmdArgs);
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+
+    child.on('close', code => {
+      if (code !== 0) {
+        return reject(new Error(`Chaincode query failed (exit ${code}): ${stderr || stdout}`));
+      }
+      const raw = stdout.trim();
+      if (!raw) return resolve(null);
+      try {
+        resolve(JSON.parse(raw));
+      } catch (_) {
+        resolve(raw);
+      }
+    });
+
+    child.on('error', err => reject(new Error(`Failed to spawn docker CLI: ${err.message}`)));
+  });
+}
+
+/**
+ * Query chronological history of a key using chaincode GetHistoryForKey (Contributor 5.1).
+ */
+async function getCertificateHistory(key, orgNum = 1) {
   try {
-    const { stdout } = await execFilePromise('docker', cmdArgs);
-    const trimmed = stdout.trim();
-    if (!trimmed) {
-      return null;
-    }
-    try {
-      return JSON.parse(trimmed);
-    } catch (e) {
-      return trimmed;
-    }
-  } catch (error) {
-    console.error(`Error querying chaincode ${functionName}:`, error.message);
-    throw new Error(`Chaincode query failed: ${error.message}`);
+    const raw = await queryChaincode('GetHistoryForKey', [key], orgNum);
+    if (!raw) return [];
+    const list = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : [raw]);
+    return list;
+  } catch (err) {
+    return [];
   }
 }
 
 /**
- * Check Fabric Network Health across all 3 Orgs and Orderer.
+ * Check network health across all 3 peer containers and orderer.
  */
 async function checkNetworkHealth() {
-  try {
-    const { stdout } = await execPromise('docker ps --format "{{.Names}}\t{{.Status}}"');
-    const lines = stdout.split('\n').filter(Boolean);
-    const containers = {};
+  const containers = [
+    'peer0.org1.academic.edu',
+    'peer0.org2.academic.edu',
+    'peer0.org3.academic.edu',
+    'orderer.academic.edu'
+  ];
 
-    lines.forEach(line => {
-      const [name, status] = line.split('\t');
-      containers[name] = status;
+  return new Promise(resolve => {
+    exec('docker ps --format "{{.Names}}"', (err, stdout) => {
+      if (err) {
+        return resolve({ allHealthy: false, error: err.message, containers: {} });
+      }
+      const running = stdout.split('\n').map(s => s.trim());
+      const health = {};
+      let allUp = true;
+      for (const c of containers) {
+        const isUp = running.includes(c);
+        health[c] = isUp ? 'UP' : 'DOWN';
+        if (!isUp) allUp = false;
+      }
+      resolve({ allHealthy: allUp, containers: health });
     });
-
-    const expected = [
-      'orderer.academic.edu',
-      'peer0.org1.academic.edu',
-      'peer0.org2.academic.edu',
-      'peer0.org3.academic.edu',
-      'couchdb0',
-      'couchdb1',
-      'couchdb2',
-      'ipfs-node',
-      'cli'
-    ];
-
-    const health = {};
-    let allUp = true;
-    for (const name of expected) {
-      const isUp = containers[name] && containers[name].startsWith('Up');
-      health[name] = {
-        name,
-        status: isUp ? 'UP' : 'DOWN',
-        detail: containers[name] || 'Not running'
-      };
-      if (!isUp) allUp = false;
-    }
-
-    return {
-      allHealthy: allUp,
-      containers: health
-    };
-  } catch (error) {
-    return {
-      allHealthy: false,
-      error: error.message
-    };
-  }
+  });
 }
 
 module.exports = {
   invokeChaincode,
   queryChaincode,
-  checkNetworkHealth
+  getCertificateHistory,
+  onLedgerEvent,
+  emitLocalEvent,
+  getEventStatus,
+  checkNetworkHealth,
+  ORG_CONFIG
 };

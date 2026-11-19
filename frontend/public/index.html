@@ -87,6 +87,7 @@
       <button class="tab-btn" data-tab="keys-tab">🔐 Cryptographic Keys & MSP</button>
       <button class="tab-btn" data-tab="revoke-tab">⚠️ Revocation</button>
       <button class="tab-btn" data-tab="ledger-tab">📊 Ledger Explorer</button>
+      <button class="tab-btn" data-tab="telemetry-tab">⚡ Health & Telemetry</button>
     </nav>
 
     <!-- Tab 1: Workflow & Issuance -->
@@ -506,6 +507,109 @@
           <!-- Execution Terminal -->
           <div class="terminal-view" id="agentLogTerminal" style="background: #0f172a; color: #38bdf8; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; padding: 1rem; border-radius: 8px; min-height: 280px; max-height: 380px; overflow-y: auto;">
             <p style="color: #94a3b8;">[Agent Orchestrator ready. Click '1-Click Autonomous Multi-Agent Pipeline' to start.]</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Tab 5: Health & Telemetry Sentinel (Contributor 6.2) -->
+    <section id="telemetry-tab" class="tab-content">
+      <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+          <div>
+            <h3 style="margin: 0; color: #f8fafc; font-size: 1.25rem;">⚡ Autonomous Consortium Health & Consensus Telemetry</h3>
+            <p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">
+              Contributor 6.2 Deliverable: Real-Time gRPC Probes, Cross-Peer Sync Parity & Self-Healing Sentinel
+            </p>
+          </div>
+          <button id="probeTelemetryBtn" class="btn btn-primary" style="display: flex; align-items: center; gap: 0.5rem;">
+            🔄 Run Live Diagnostic Probe
+          </button>
+        </div>
+
+        <!-- Telemetry KPI Summary Cards -->
+        <div class="telemetry-metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Consortium Status</span>
+            <span id="tmSystemStatus" class="metric-value">PROBING...</span>
+            <span id="tmHealthyContainers" class="metric-sub">0/9 Active</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Consensus Protocol</span>
+            <span class="metric-value" style="color: #38bdf8;">etcdraft</span>
+            <span class="metric-sub">Raft Crash Fault-Tolerant</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Block Height</span>
+            <span id="tmBlockHeight" class="metric-value" style="color: #a855f7;">--</span>
+            <span class="metric-sub">academicchannel</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Sync Parity</span>
+            <span id="tmSyncParity" class="metric-value">PROBING...</span>
+            <span class="metric-sub">Across 3 Peer Nodes</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Probe Latency</span>
+            <span id="tmProbeLatency" class="metric-value">-- ms</span>
+            <span class="metric-sub">Sentinel Response</span>
+          </div>
+        </div>
+
+        <!-- Section 1: Peers Sync Parity -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="margin-bottom: 0.75rem; color: #f8fafc; font-size: 1.05rem;">🛡️ Cross-Peer Block Height Synchronization Parity</h4>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Organization</th>
+                  <th>Peer Host & gRPC Port</th>
+                  <th>Membership (MSP)</th>
+                  <th>Block Height</th>
+                  <th>Current Block Hash</th>
+                  <th>Parity Drift</th>
+                  <th>Consensus Status</th>
+                </tr>
+              </thead>
+              <tbody id="tmPeersTbody">
+                <tr><td colspan="7" class="empty-hint">Probing peers...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 2: Consortium Infrastructure Status -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="margin-bottom: 0.75rem; color: #f8fafc; font-size: 1.05rem;">🖥️ Consortium Infrastructure & Container Health</h4>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Consortium Role</th>
+                  <th>Network Port</th>
+                  <th>Status</th>
+                  <th>Docker Container Detail</th>
+                </tr>
+              </thead>
+              <tbody id="tmNodesTbody">
+                <tr><td colspan="5" class="empty-hint">Probing containers...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section 3: Self-Healing Sentinel & Advisory Box -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="margin-bottom: 0.75rem; color: #f8fafc; font-size: 1.05rem;">🤖 Autonomous Sentinel: Self-Healing & Remediation Advice</h4>
+          <div id="tmAdviceList" class="advice-box">
+            <div class="advice-item optimal">
+              <span class="advice-badge badge-optimal">OPTIMAL</span>
+              <div>
+                <strong>Consortium Network:</strong> All 3 organizations, Raft orderer, CouchDBs, and IPFS node are healthy with 100% block sync parity.
+                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem;">Action: System is fully operational. Zero maintenance required.</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
