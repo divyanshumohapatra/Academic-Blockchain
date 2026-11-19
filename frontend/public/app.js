@@ -450,13 +450,31 @@ async function executeCertificateIssuance() {
 
     const data = await res.json();
     if (res.ok) {
+      const agentList = Array.isArray(data.executionLogs) ? data.executionLogs.map(l => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:0.4rem 0.6rem; margin-top:0.35rem; border-radius:6px; font-size:0.8rem; border-left:3px solid #38bdf8;">
+          <div>
+            <strong style="color:#38bdf8;">${l.agent}</strong>
+            <span style="color:#94a3b8; margin-left:0.4rem;">(${l.role})</span>
+          </div>
+          <span style="background:#0f172a; padding:2px 6px; border-radius:4px; color:#10b981; font-family:monospace;">
+            ${l.aiSource ? `⚡ ${l.aiSource}` : 'CONF'}: ${(Number(l.confidence || 0.99) * 100).toFixed(0)}%
+          </span>
+        </div>
+      `).join('') : '';
+
       panel.innerHTML = `
         <div style="border-left: 3px solid #10b981; padding-left: 1rem;">
           <h4 style="color:#10b981; margin-bottom: 0.5rem;">🎉 Certificate Successfully Issued & Anchored!</h4>
           <p><strong>Certificate ID:</strong> <code>${data.certId}</code></p>
           <p><strong>IPFS Content ID (CID):</strong> <code>${data.ipfsCid}</code></p>
           <p><strong>SHA-256 Digest:</strong> <code style="word-break:break-all;">${data.sha256Hash}</code></p>
-          <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+          ${agentList ? `
+            <div style="margin-top:0.75rem;">
+              <p style="font-size:0.85rem; font-weight:600; color:#cbd5e1; margin-bottom:0.25rem;">🤖 Module 4 Multi-Agent Verification & Anchoring Team:</p>
+              ${agentList}
+            </div>
+          ` : ''}
+          <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap:wrap;">
             <a href="${API_BASE}/certificates/${data.certId}/pdf" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-block;">📄 View Generated PDF</a>
             <a href="http://localhost:8080/ipfs/${data.ipfsCid}" target="_blank" class="btn-secondary" style="text-decoration:none; display:inline-block;">🌐 View on IPFS Gateway</a>
           </div>
@@ -634,19 +652,22 @@ async function loadCertificates() {
       return;
     }
 
-    tbody.innerHTML = certs.map(c => `
+    tbody.innerHTML = certs.map(c => {
+      const ipfsVal = c.ipfsHash || c.ipfsCid || '';
+      const docVal = c.docHash || c.sha256Hash || '';
+      return `
       <tr>
         <td><code>${c.certId}</code></td>
         <td>${c.studentId}</td>
         <td>${c.certType}</td>
         <td><span class="step-tag" style="background:${c.status === 'ISSUED' ? '#065f46' : '#991b1b'}; padding:2px 6px; border-radius:4px;">${c.status}</span></td>
-        <td><a href="http://localhost:8080/ipfs/${c.ipfsHash}" target="_blank" style="color:#38bdf8;">${c.ipfsHash?.substring(0, 10)}...</a></td>
-        <td style="font-family:monospace; font-size:0.75rem;">${c.docHash?.substring(0, 16)}...</td>
+        <td>${ipfsVal ? `<a href="http://localhost:8080/ipfs/${ipfsVal}" target="_blank" style="color:#38bdf8;" title="${ipfsVal}">${ipfsVal.substring(0, 10)}...</a>` : '—'}</td>
+        <td style="font-family:monospace; font-size:0.75rem;" title="${docVal}">${docVal ? `${docVal.substring(0, 16)}...` : '—'}</td>
         <td>
           <a href="${API_BASE}/certificates/${c.certId}/pdf" target="_blank" class="btn-secondary btn-sm" style="text-decoration:none;">PDF</a>
         </td>
       </tr>
-    `).join('');
+    `;}).join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-hint">Error: ${err.message}</td></tr>`;
   }

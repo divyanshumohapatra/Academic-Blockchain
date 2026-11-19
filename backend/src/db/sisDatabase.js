@@ -225,9 +225,9 @@ const SEED_STUDENTS = [
     student_id: 'STU-2024-001',
     name: 'Alice Johnson',
     email: 'alice@academic.edu',
-    department: 'Computer Science & Engineering',
+    department: 'Department of Computer Science & Engineering',
     enrollment_year: '2024',
-    attendance: 91.2,
+    attendance: 92.0,
     cie_marks: 46.0,
     prerequisites_met: 1,
     total_credits: 164,
@@ -240,13 +240,14 @@ const SEED_STUDENTS = [
     residency_met: 1,
     institutional_clearance: 1,
     fee_dues: 0.0,
-    library_dues: 0.0
+    library_dues: 0.0,
+    is_on_ledger: 1
   },
   {
     student_id: 'STU-2024-002',
     name: 'Rahul Sharma',
     email: 'rahul.sharma@academic.edu',
-    department: 'Computer Science & Engineering',
+    department: 'Department of Computer Science & Engineering',
     enrollment_year: '2024',
     attendance: 84.0,
     cie_marks: 38.0,
@@ -261,34 +262,124 @@ const SEED_STUDENTS = [
     residency_met: 1,
     institutional_clearance: 1,
     fee_dues: 0.0,
-    library_dues: 0.0
+    library_dues: 0.0,
+    is_on_ledger: 1
   },
   {
-    student_id: 'STU-2024-DEFICIT',
-    name: 'Bob Smith',
-    email: 'bob.smith@academic.edu',
-    department: 'Computer Science & Engineering',
+    student_id: 'STU-2024-003',
+    name: 'Priya Patel',
+    email: 'priya.patel@academic.edu',
+    department: 'Department of Computer Science & Engineering',
     enrollment_year: '2024',
-    attendance: 62.0,       // Deficit: Below 75% statutory requirement
-    cie_marks: 18.0,        // Deficit: Below 20.0/50 requirement
-    prerequisites_met: 0,
-    total_credits: 144,
+    attendance: 88.0,
+    cie_marks: 42.0,
+    prerequisites_met: 1,
+    total_credits: 160,
     required_credits: 160,
     disciplinary_clearance: 1,
-    capstone_score: 65.0,
+    capstone_score: 86.0,
+    originality_report: 90.0,
+    cgpa: 8.65,
+    backlogs: 0,
+    residency_met: 1,
+    institutional_clearance: 1,
+    fee_dues: 25000.0,
+    library_dues: 1200.0,
+    is_on_ledger: 1
+  },
+  {
+    student_id: 'STU-2024-004',
+    name: 'David Miller',
+    email: 'david.miller@academic.edu',
+    department: 'Department of Computer Science & Engineering',
+    enrollment_year: '2024',
+    attendance: 78.0,
+    cie_marks: 22.0,
+    prerequisites_met: 1,
+    total_credits: 156,
+    required_credits: 160,
+    disciplinary_clearance: 1,
+    capstone_score: 60.0,
+    originality_report: 80.0,
+    cgpa: 5.80,
+    backlogs: 1,
+    residency_met: 1,
+    institutional_clearance: 1,
+    fee_dues: 0.0,
+    library_dues: 0.0,
+    is_on_ledger: 1
+  },
+  {
+    student_id: 'STU-2024-005',
+    name: 'Ananya Rao',
+    email: 'ananya.rao@academic.edu',
+    department: 'Department of Computer Science & Engineering',
+    enrollment_year: '2024',
+    attendance: 61.5,
+    cie_marks: 16.0,
+    prerequisites_met: 0,
+    total_credits: 148,
+    required_credits: 160,
+    disciplinary_clearance: 1,
+    capstone_score: 70.0,
     originality_report: 82.0,
     cgpa: 6.80,
     backlogs: 0,
     residency_met: 1,
     institutional_clearance: 1,
     fee_dues: 0.0,
-    library_dues: 0.0
+    library_dues: 0.0,
+    is_on_ledger: 1
+  },
+  {
+    student_id: 'STU-2024-006',
+    name: 'Vikram Malhotra',
+    email: 'vikram.m.student@academic.edu',
+    department: 'Department of Computer Science & Engineering',
+    enrollment_year: '2024',
+    attendance: 90.0,
+    cie_marks: 44.0,
+    prerequisites_met: 1,
+    total_credits: 160,
+    required_credits: 160,
+    disciplinary_clearance: 1,
+    capstone_score: 88.0,
+    originality_report: 94.0,
+    cgpa: 8.90,
+    backlogs: 0,
+    residency_met: 1,
+    institutional_clearance: 1,
+    fee_dues: 0.0,
+    library_dues: 0.0,
+    is_on_ledger: 1
+  },
+  {
+    student_id: 'STU-2020-013',
+    name: 'Divyanshu Mohapatra',
+    email: 'divyanshu.m@academic.edu',
+    department: 'Department of Computer Science & Engineering',
+    enrollment_year: '2020',
+    attendance: 90.0,
+    cie_marks: 45.0,
+    prerequisites_met: 1,
+    total_credits: 160,
+    required_credits: 160,
+    disciplinary_clearance: 1,
+    capstone_score: 90.0,
+    originality_report: 95.0,
+    cgpa: 8.85,
+    backlogs: 0,
+    residency_met: 1,
+    institutional_clearance: 1,
+    fee_dues: 0.0,
+    library_dues: 0.0,
+    is_on_ledger: 1
   },
   {
     student_id: 'STU-2024-BACKLOG',
     name: 'Charlie Brown',
     email: 'charlie.brown@academic.edu',
-    department: 'Computer Science & Engineering',
+    department: 'Department of Computer Science & Engineering',
     enrollment_year: '2024',
     attendance: 80.0,
     cie_marks: 32.0,
@@ -303,13 +394,36 @@ const SEED_STUDENTS = [
     residency_met: 1,
     institutional_clearance: 1,
     fee_dues: 0.0,
-    library_dues: 0.0
+    library_dues: 0.0,
+    is_on_ledger: 1
+  },
+  {
+    student_id: 'STU-2024-DEFICIT',
+    name: 'Bob Smith',
+    email: 'bob.smith@academic.edu',
+    department: 'Department of Computer Science & Engineering',
+    enrollment_year: '2024',
+    attendance: 62.0,
+    cie_marks: 18.0,
+    prerequisites_met: 0,
+    total_credits: 144,
+    required_credits: 160,
+    disciplinary_clearance: 1,
+    capstone_score: 65.0,
+    originality_report: 82.0,
+    cgpa: 6.80,
+    backlogs: 0,
+    residency_met: 1,
+    institutional_clearance: 1,
+    fee_dues: 0.0,
+    library_dues: 0.0,
+    is_on_ledger: 1
   },
   {
     student_id: 'STU-2024-DUES',
     name: 'Diana Prince',
     email: 'diana.prince@academic.edu',
-    department: 'Computer Science & Engineering',
+    department: 'Department of Computer Science & Engineering',
     enrollment_year: '2024',
     attendance: 89.0,
     cie_marks: 44.0,
@@ -324,7 +438,8 @@ const SEED_STUDENTS = [
     residency_met: 1,
     institutional_clearance: 1,
     fee_dues: 25000.0,
-    library_dues: 1500.0
+    library_dues: 1500.0,
+    is_on_ledger: 1
   }
 ];
 
@@ -397,10 +512,46 @@ const SEED_SEMESTER_REGISTRATIONS = [
     academic_year: '2024-2025'
   },
   {
-    student_id: 'STU-2024-DEFICIT',
-    student_name: 'Bob Smith',
+    student_id: 'STU-2024-003',
+    student_name: 'Priya Patel',
+    department: 'Department of Computer Science & Engineering',
+    branch: 'Bachelor of Technology in Computer Science & Engineering (B.Tech CSE)',
+    semester_number: 5,
+    semester_label: 'Semester 5',
+    academic_year: '2024-2025'
+  },
+  {
+    student_id: 'STU-2024-004',
+    student_name: 'David Miller',
     department: 'Department of Computer Science & Engineering',
     branch: 'Master of Technology in Computer Science & Engineering (M.Tech CSE)',
+    semester_number: 5,
+    semester_label: 'Semester 5',
+    academic_year: '2024-2025'
+  },
+  {
+    student_id: 'STU-2024-005',
+    student_name: 'Ananya Rao',
+    department: 'Department of Computer Science & Engineering',
+    branch: 'Master of Computer Applications (MCA)',
+    semester_number: 5,
+    semester_label: 'Semester 5',
+    academic_year: '2024-2025'
+  },
+  {
+    student_id: 'STU-2024-006',
+    student_name: 'Vikram Malhotra',
+    department: 'Department of Computer Science & Engineering',
+    branch: 'Bachelor of Technology in Computer Science & Engineering (B.Tech CSE)',
+    semester_number: 5,
+    semester_label: 'Semester 5',
+    academic_year: '2024-2025'
+  },
+  {
+    student_id: 'STU-2020-013',
+    student_name: 'Divyanshu Mohapatra',
+    department: 'Department of Computer Science & Engineering',
+    branch: 'Master of Computer Applications (MCA)',
     semester_number: 5,
     semester_label: 'Semester 5',
     academic_year: '2024-2025'
@@ -410,6 +561,15 @@ const SEED_SEMESTER_REGISTRATIONS = [
     student_name: 'Charlie Brown',
     department: 'Department of Computer Science & Engineering',
     branch: 'Master of Computer Applications (MCA)',
+    semester_number: 5,
+    semester_label: 'Semester 5',
+    academic_year: '2024-2025'
+  },
+  {
+    student_id: 'STU-2024-DEFICIT',
+    student_name: 'Bob Smith',
+    department: 'Department of Computer Science & Engineering',
+    branch: 'Master of Technology in Computer Science & Engineering (M.Tech CSE)',
     semester_number: 5,
     semester_label: 'Semester 5',
     academic_year: '2024-2025'
@@ -566,13 +726,60 @@ for (const student of SEED_STUDENTS) {
     insertEnrollmentStmt.run(course.course_id, student.student_id, did, 'Semester 5');
 
     const markId = `${course.course_id}_${student.student_id}`;
-    // Alice Johnson has pre-verified excellent marks
-    // Bob Smith has poor attendance and low CIE
-    const isDeficit = student.student_id === 'STU-2024-DEFICIT';
-    const cie = isDeficit ? 16.0 : (student.cie_marks || 42.0);
-    const lab = isDeficit ? 12.0 : 23.0;
-    const att = isDeficit ? 60.0 : (student.attendance || 88.0);
-    const endsem = isDeficit ? 20.0 : 44.0;
+    let cie = student.cie_marks || 42.0;
+    let lab = 23.0;
+    let att = student.attendance || 88.0;
+    let endsem = 44.0;
+    let signed = 1;
+    let status = 'APPROVED_BY_FACULTY';
+
+    if (student.student_id === 'STU-2024-004') {
+      // David Miller: Failed CS503 (Applied Cryptography) with active backlog
+      if (course.course_id === 'CS503') {
+        cie = 12.0;
+        lab = 10.0;
+        att = 76.0;
+        endsem = 16.0;
+        signed = 0;
+        status = 'DRAFT';
+      } else {
+        cie = 32.0;
+        lab = 20.0;
+        att = 80.0;
+        endsem = 34.0;
+      }
+    } else if (student.student_id === 'STU-2024-005') {
+      // Ananya Rao: Statutory attendance (<75%) and CIE (<20) deficit in CS501 and CS502
+      if (course.course_id === 'CS501') {
+        cie = 16.0;
+        lab = 12.0;
+        att = 62.0;
+        endsem = 20.0;
+        signed = 0;
+        status = 'DRAFT';
+      } else if (course.course_id === 'CS502') {
+        cie = 15.0;
+        lab = 10.0;
+        att = 59.0;
+        endsem = 20.0;
+        signed = 0;
+        status = 'DRAFT';
+      } else {
+        cie = 24.0;
+        lab = 18.0;
+        att = 76.0;
+        endsem = 28.0;
+      }
+    } else if (student.student_id === 'STU-2024-DEFICIT') {
+      // Bob Smith: Full deficit persona
+      cie = 16.0;
+      lab = 12.0;
+      att = 60.0;
+      endsem = 20.0;
+      signed = 0;
+      status = 'DRAFT';
+    }
+
     const total = cie + lab + endsem;
     const grade = total >= 90 ? 'EX' : (total >= 80 ? 'A' : (total >= 70 ? 'B' : (total >= 60 ? 'C' : (total >= 50 ? 'D' : 'F'))));
 
@@ -587,10 +794,10 @@ for (const student of SEED_STUDENTS) {
       endsem,
       total,
       grade,
-      isDeficit ? 0 : 1, // Alice pre-signed, deficit pending/fail
-      isDeficit ? null : `SIG_FACULTY_${course.faculty_id}_HASH_${markId}`,
+      signed,
+      signed ? `SIG_FACULTY_${course.faculty_id}_HASH_${markId}` : null,
       course.faculty_id,
-      isDeficit ? 'DRAFT' : 'APPROVED_BY_FACULTY',
+      status,
       new Date().toISOString()
     );
   }
@@ -630,14 +837,14 @@ function formatStudentRecord(row) {
 
 function getStudentByRollNumber(studentId) {
   if (!studentId) return null;
-  const stmt = db.prepare('SELECT * FROM students WHERE student_id = ?');
+  const stmt = db.prepare('SELECT * FROM students WHERE student_id = ? COLLATE NOCASE');
   const row = stmt.get(studentId.trim());
   return formatStudentRecord(row);
 }
 
 function getStudentByDID(did) {
   if (!did) return null;
-  const stmt = db.prepare('SELECT * FROM students WHERE did = ?');
+  const stmt = db.prepare('SELECT * FROM students WHERE did = ? COLLATE NOCASE');
   const row = stmt.get(did.trim());
   if (row) return formatStudentRecord(row);
 
@@ -663,7 +870,7 @@ function markStudentOnLedger(studentId, did) {
   const stmt = db.prepare(`
     UPDATE students
     SET is_on_ledger = 1, registered_on_ledger_at = ?, did = COALESCE(?, did)
-    WHERE student_id = ?
+    WHERE student_id = ? COLLATE NOCASE
   `);
   stmt.run(now, did || null, studentId.trim());
   return getStudentByRollNumber(studentId.trim());
@@ -677,7 +884,7 @@ function isStudentOnLedger(studentId) {
 // Student Semester Registration Functions
 function getStudentSemesterRegistration(studentId) {
   if (!studentId) return null;
-  const stmt = db.prepare(`SELECT * FROM student_semester_registrations WHERE student_id = ?`);
+  const stmt = db.prepare(`SELECT * FROM student_semester_registrations WHERE student_id = ? COLLATE NOCASE`);
   const row = stmt.get(studentId.trim());
   if (!row) return null;
   return {
@@ -1044,10 +1251,82 @@ function upsertCourseMarks(courseId, marksArray, facultyId, signature) {
   return results;
 }
 
+
+/**
+ * Automatically sign and approve eligible course marks for a student.
+ * If attendance >= 75% and CIE >= 20 and total >= 50, signs with instructor authority key.
+ */
+function autoApproveAndSignEligibleCourseMarks(studentId) {
+  if (!studentId) return [];
+  const student = getStudentByRollNumber(studentId);
+  if (!student) return [];
+
+  const semReg = getStudentSemesterRegistration(student.studentId);
+  let courses = [];
+  if (semReg && Array.isArray(semReg.registeredCourses) && semReg.registeredCourses.length > 0) {
+    courses = semReg.registeredCourses;
+  } else {
+    courses = getCoursesBySemester(student.semester_label || 'Semester 5');
+  }
+
+  const marksStmt = db.prepare(`SELECT * FROM course_marks WHERE student_id = ? COLLATE NOCASE`);
+  const existingMarks = marksStmt.all(student.studentId);
+
+  const updateStmt = db.prepare(`
+    INSERT OR REPLACE INTO course_marks (
+      id, course_id, student_id, student_did,
+      cie_marks, lab_marks, attendance, endsem_marks, total_marks, grade,
+      signed_by_faculty, faculty_signature, faculty_id, status, submitted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const signedCourses = [];
+
+  for (const c of courses) {
+    const courseId = c.course_id || c.courseId;
+    let m = existingMarks.find(x => x.course_id === courseId);
+    const courseObj = getCourseById(courseId);
+    const facultyId = courseObj ? courseObj.faculty_id : (m?.faculty_id || 'FAC-001');
+    const markId = `${courseId}_${student.studentId}`;
+    const att = m && m.attendance !== undefined && m.attendance !== null ? Number(m.attendance) : (Number(student.attendance) || 88.0);
+    const cie = m && m.cie_marks !== undefined && m.cie_marks !== null ? Number(m.cie_marks) : (Number(student.cie_marks) || 40.0);
+    const lab = m && m.lab_marks !== undefined && m.lab_marks !== null ? Number(m.lab_marks) : 22.0;
+    const endsem = m && m.endsem_marks !== undefined && m.endsem_marks !== null ? Number(m.endsem_marks) : 42.0;
+    const total = m && m.total_marks !== undefined && m.total_marks !== null ? Number(m.total_marks) : (cie + lab + endsem);
+    const grade = m && m.grade ? m.grade : (total >= 90 ? 'EX' : (total >= 80 ? 'A' : (total >= 70 ? 'B' : (total >= 60 ? 'C' : (total >= 50 ? 'D' : 'F')))));
+
+    // Only sign if attendance >= 75 and cie >= 20 and total >= 50
+    if (att >= 75.0 && cie >= 20.0 && total >= 50.0) {
+      const signature = `SIG_FACULTY_${facultyId}_HASH_${markId}`;
+      updateStmt.run(
+        markId,
+        courseId,
+        student.studentId,
+        student.did || generateStudentDID(student.name, student.studentId),
+        cie,
+        lab,
+        att,
+        endsem,
+        total,
+        grade,
+        1,
+        signature,
+        facultyId,
+        'APPROVED_BY_FACULTY',
+        new Date().toISOString()
+      );
+      signedCourses.push({ courseId, markId, status: 'APPROVED_BY_FACULTY' });
+    }
+  }
+
+  return signedCourses;
+}
+
 // Comprehensive Student Audit for Faculty Advisor Gate
 function getStudentComprehensiveAudit(studentId) {
   const student = getStudentByRollNumber(studentId);
   if (!student) return null;
+  try { autoApproveAndSignEligibleCourseMarks(student.studentId); } catch (e) {}
 
   // Retrieve student's registered semester & enrolled courses
   const semReg = getStudentSemesterRegistration(studentId);
@@ -1064,7 +1343,7 @@ function getStudentComprehensiveAudit(studentId) {
     }
   }
 
-  const marksStmt = db.prepare(`SELECT * FROM course_marks WHERE student_id = ?`);
+  const marksStmt = db.prepare(`SELECT * FROM course_marks WHERE student_id = ? COLLATE NOCASE`);
   const marks = marksStmt.all(studentId);
 
   const courseAudits = [];
@@ -1132,7 +1411,7 @@ function getStudentComprehensiveAudit(studentId) {
   const effectiveBacklogs = allCoursesPassed ? 0 : Math.max(student.backlogs || 0, activeBacklogs);
 
   if (effectiveBacklogs !== student.backlogs) {
-    db.prepare(`UPDATE students SET backlogs = ? WHERE student_id = ?`).run(effectiveBacklogs, studentId);
+    db.prepare(`UPDATE students SET backlogs = ? WHERE student_id = ? COLLATE NOCASE`).run(effectiveBacklogs, studentId);
     student.backlogs = effectiveBacklogs;
   }
 
@@ -1185,8 +1464,19 @@ function recordMultiSigVote(requestId, stage, voterId, voterName, voterRole, dec
 }
 
 function getMultiSigStatus(requestId, stage) {
-  const stmt = db.prepare(`SELECT * FROM multisig_votes WHERE request_id = ? AND stage = ?`);
-  const votes = stmt.all(requestId, stage);
+  const isDac = String(stage).toUpperCase().includes('DAC');
+  const isDean = String(stage).toUpperCase().includes('DEAN');
+  let votes;
+  if (isDac) {
+    const stmt = db.prepare(`SELECT * FROM multisig_votes WHERE request_id = ? COLLATE NOCASE AND (stage = 'DAC' OR stage = 'DAC_COMMITTEE' OR stage = 'DAC_MULTISIG')`);
+    votes = stmt.all(requestId);
+  } else if (isDean) {
+    const stmt = db.prepare(`SELECT * FROM multisig_votes WHERE request_id = ? COLLATE NOCASE AND (stage = 'DEAN' OR stage = 'DEAN_COUNCIL' OR stage = 'DEAN_MULTISIG')`);
+    votes = stmt.all(requestId);
+  } else {
+    const stmt = db.prepare(`SELECT * FROM multisig_votes WHERE request_id = ? COLLATE NOCASE AND stage = ? COLLATE NOCASE`);
+    votes = stmt.all(requestId, stage);
+  }
 
   const approvals = votes.filter(v => v.decision === 'APPROVE');
   const rejections = votes.filter(v => v.decision === 'REJECT');
@@ -1246,8 +1536,8 @@ function saveCertificateRequest(data) {
 
 function getCertificateRequest(requestId) {
   if (!requestId) return null;
-  const stmt = db.prepare(`SELECT * FROM certificate_requests WHERE request_id = ? OR LOWER(request_id) = LOWER(?)`);
-  const row = stmt.get(requestId.trim(), requestId.trim());
+  const stmt = db.prepare(`SELECT * FROM certificate_requests WHERE request_id = ? COLLATE NOCASE`);
+  const row = stmt.get(requestId.trim());
   if (!row) return null;
   let details = {};
   try {
@@ -1271,7 +1561,7 @@ function getCertificateRequest(requestId) {
 
 function getLatestCertificateRequestForStudent(studentId) {
   if (!studentId) return null;
-  const stmt = db.prepare(`SELECT * FROM certificate_requests WHERE student_id = ? ORDER BY submitted_at DESC LIMIT 1`);
+  const stmt = db.prepare(`SELECT * FROM certificate_requests WHERE student_id = ? COLLATE NOCASE ORDER BY submitted_at DESC LIMIT 1`);
   const row = stmt.get(studentId.trim());
   if (!row) return null;
   let details = {};
@@ -1332,9 +1622,9 @@ function updateCertificateRequestStatus(requestId, newStatus, detailsUpdate = {}
   const stmt = db.prepare(`
     UPDATE certificate_requests
     SET status = ?, details_json = ?, updated_at = ?
-    WHERE request_id = ?
+    WHERE request_id = ? COLLATE NOCASE
   `);
-  stmt.run(newStatus, JSON.stringify(mergedDetails), new Date().toISOString(), requestId);
+  stmt.run(newStatus, JSON.stringify(mergedDetails), new Date().toISOString(), existing.requestId);
   return getCertificateRequest(requestId);
 }
 
@@ -1342,7 +1632,16 @@ function autoCreateRequestForStudent(studentId, customRequestId = null) {
   const student = getStudentByRollNumber(studentId);
   if (!student) return null;
   const semReg = getStudentSemesterRegistration(student.studentId);
-  const requestId = customRequestId || `REQ-${student.studentId.replace('STU-', '')}`;
+  
+  let requestId = customRequestId ? customRequestId.trim() : null;
+  if (!requestId || /^STU-/i.test(requestId)) {
+    requestId = `REQ-${student.studentId.replace(/^STU-/i, '')}`;
+  }
+
+  // If request already exists, return existing without reverting status to SUBMITTED
+  const existing = getCertificateRequest(requestId);
+  if (existing) return existing;
+
   const did = student.did || generateStudentDID(student.name, student.studentId);
   const certType = semReg?.branch || 'Master of Computer Applications (MCA)';
   const department = semReg?.department || student.department || 'Department of Computer Science & Engineering';
@@ -1368,11 +1667,313 @@ function autoCreateRequestForStudent(studentId, customRequestId = null) {
   });
 }
 
-// Pre-seed initial requests so REQ-2024-001 (Alice) and REQ-2024-002 (Rahul) are available immediately
-try {
+
+function saveCertificate(cert) {
+  if (!cert || !cert.certId) return null;
+  const stmt = db.prepare(`
+    INSERT INTO certificates (
+      cert_id, request_id, student_id, student_name, student_did,
+      department, cert_type, ipfs_hash, doc_hash, issue_date, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(cert_id) DO UPDATE SET
+      request_id = COALESCE(NULLIF(excluded.request_id, ''), certificates.request_id),
+      student_name = COALESCE(NULLIF(excluded.student_name, ''), certificates.student_name),
+      student_did = COALESCE(NULLIF(excluded.student_did, ''), certificates.student_did),
+      department = COALESCE(NULLIF(excluded.department, ''), certificates.department),
+      cert_type = COALESCE(NULLIF(excluded.cert_type, ''), certificates.cert_type),
+      ipfs_hash = CASE WHEN excluded.ipfs_hash != '' THEN excluded.ipfs_hash ELSE certificates.ipfs_hash END,
+      doc_hash = CASE WHEN excluded.doc_hash != '' THEN excluded.doc_hash ELSE certificates.doc_hash END,
+      issue_date = COALESCE(NULLIF(excluded.issue_date, ''), certificates.issue_date),
+      status = COALESCE(NULLIF(excluded.status, ''), certificates.status)
+  `);
+
+  const ipfsHash = cert.ipfsHash || cert.ipfsCid || '';
+  const docHash = cert.docHash || cert.sha256Hash || '';
+
+  stmt.run(
+    cert.certId,
+    cert.requestId || '',
+    cert.studentId,
+    cert.studentName || '',
+    cert.studentDid || '',
+    cert.department || '',
+    cert.certType || 'Degree Certificate',
+    ipfsHash,
+    docHash,
+    cert.issueDate || new Date().toISOString().substring(0, 10),
+    cert.status || 'ISSUED',
+    cert.createdAt || new Date().toISOString()
+  );
+
+  return getCertificate(cert.certId);
+}
+
+function getCertificate(certId) {
+  if (!certId) return null;
+  const stmt = db.prepare(`SELECT * FROM certificates WHERE cert_id = ? COLLATE NOCASE`);
+  const row = stmt.get(certId.trim());
+  if (!row) return null;
+  return {
+    certId: row.cert_id,
+    requestId: row.request_id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    studentDid: row.student_did,
+    department: row.department,
+    certType: row.cert_type,
+    ipfsHash: row.ipfs_hash,
+    ipfsCid: row.ipfs_hash,
+    docHash: row.doc_hash,
+    sha256Hash: row.doc_hash,
+    issueDate: row.issue_date,
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
+
+function getCertificateByRequestId(requestId) {
+  if (!requestId) return null;
+  const stmt = db.prepare(`SELECT * FROM certificates WHERE request_id = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 1`);
+  const row = stmt.get(requestId.trim());
+  if (!row) return null;
+  return {
+    certId: row.cert_id,
+    requestId: row.request_id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    studentDid: row.student_did,
+    department: row.department,
+    certType: row.cert_type,
+    ipfsHash: row.ipfs_hash,
+    ipfsCid: row.ipfs_hash,
+    docHash: row.doc_hash,
+    sha256Hash: row.doc_hash,
+    issueDate: row.issue_date,
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
+
+function getAllCertificates() {
+  const stmt = db.prepare(`SELECT * FROM certificates ORDER BY created_at DESC`);
+  const rows = stmt.all();
+  return rows.map(row => ({
+    certId: row.cert_id,
+    requestId: row.request_id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    studentDid: row.student_did,
+    department: row.department,
+    certType: row.cert_type,
+    ipfsHash: row.ipfs_hash,
+    ipfsCid: row.ipfs_hash,
+    docHash: row.doc_hash,
+    sha256Hash: row.doc_hash,
+    issueDate: row.issue_date,
+    status: row.status,
+    createdAt: row.created_at
+  }));
+}
+
+function seedAllCoreData() {
+  const now = new Date().toISOString();
+
+  // 1. Seed faculties & courses
+  for (const f of SEED_FACULTIES) {
+    insertFacultyStmt.run(
+      f.faculty_id, f.name, f.email, f.password, f.department, f.designation, f.course_id, f.course_name, now
+    );
+  }
+
+  for (const [semName, semCourses] of Object.entries(SEMESTER_COURSES_CATALOG)) {
+    for (const c of semCourses) {
+      insertCourseStmt.run(
+        c.course_id, c.course_name, 'Department of Computer Science & Engineering', c.credits, c.faculty_id, semName
+      );
+    }
+  }
+
+  // 2. Seed students
+  for (const s of SEED_STUDENTS) {
+    const did = generateStudentDID(s.name, s.student_id);
+    insertStudentStmt.run(
+      s.student_id, did, s.name, s.email, s.department, s.enrollment_year,
+      s.attendance, s.cie_marks, s.prerequisites_met, s.total_credits, s.required_credits,
+      s.disciplinary_clearance, s.capstone_score, s.originality_report,
+      s.cgpa, s.backlogs, s.residency_met, s.institutional_clearance, s.fee_dues, s.library_dues,
+      s.is_on_ledger ? 1 : 0, s.is_on_ledger ? now : null
+    );
+  }
+
+  // 3. Seed semester registrations
+  for (const reg of SEED_SEMESTER_REGISTRATIONS) {
+    insertSemesterRegStmt.run(
+      `REG_${reg.student_id}_SEM5`,
+      reg.student_id,
+      reg.student_name,
+      reg.department,
+      reg.branch,
+      reg.semester_number,
+      reg.semester_label,
+      reg.academic_year,
+      JSON.stringify(STANDARD_SEM5_COURSES),
+      'ACTIVE',
+      now
+    );
+  }
+
+  // 4. Enrollments and marks
+  for (const student of SEED_STUDENTS) {
+    const did = generateStudentDID(student.name, student.student_id);
+    for (const course of SEED_FACULTIES) {
+      insertEnrollmentStmt.run(course.course_id, student.student_id, did, 'Semester 5');
+      const markId = `${course.course_id}_${student.student_id}`;
+
+      let cie = student.cie_marks || 42.0;
+      let lab = 23.0;
+      let att = student.attendance || 88.0;
+      let endsem = 44.0;
+      let signed = 1;
+      let status = 'APPROVED_BY_FACULTY';
+
+      if (student.student_id === 'STU-2024-004') {
+        if (course.course_id === 'CS503') {
+          cie = 12.0;
+          lab = 10.0;
+          att = 76.0;
+          endsem = 16.0;
+          signed = 0;
+          status = 'DRAFT';
+        } else {
+          cie = 32.0;
+          lab = 20.0;
+          att = 80.0;
+          endsem = 34.0;
+        }
+      } else if (student.student_id === 'STU-2024-005') {
+        if (course.course_id === 'CS501') {
+          cie = 16.0;
+          lab = 12.0;
+          att = 62.0;
+          endsem = 20.0;
+          signed = 0;
+          status = 'DRAFT';
+        } else if (course.course_id === 'CS502') {
+          cie = 15.0;
+          lab = 10.0;
+          att = 59.0;
+          endsem = 20.0;
+          signed = 0;
+          status = 'DRAFT';
+        } else {
+          cie = 24.0;
+          lab = 18.0;
+          att = 76.0;
+          endsem = 28.0;
+        }
+      } else if (student.student_id === 'STU-2024-DEFICIT') {
+        cie = 16.0;
+        lab = 12.0;
+        att = 60.0;
+        endsem = 20.0;
+        signed = 0;
+        status = 'DRAFT';
+      }
+
+      const total = cie + lab + endsem;
+      const grade = total >= 90 ? 'EX' : (total >= 80 ? 'A' : (total >= 70 ? 'B' : (total >= 60 ? 'C' : (total >= 50 ? 'D' : 'F'))));
+
+      insertMarksStmt.run(
+        markId,
+        course.course_id,
+        student.student_id,
+        did,
+        cie,
+        lab,
+        att,
+        endsem,
+        total,
+        grade,
+        signed,
+        signed ? `SIG_FACULTY_${course.faculty_id}_HASH_${markId}` : null,
+        course.faculty_id,
+        status,
+        now
+      );
+    }
+  }
+
+  // 5. Pre-seed standard demonstration requests
   autoCreateRequestForStudent('STU-2024-001', 'REQ-2024-001');
-  autoCreateRequestForStudent('STU-2024-002', 'REQ-2024-002');
-} catch (e) {}
+
+  const req2 = autoCreateRequestForStudent('STU-2024-002', 'REQ-2024-002');
+  if (req2) {
+    updateCertificateRequestStatus('REQ-2024-002', 'ADMIN_FINALIZED', {
+      preEndorsed: true,
+      approvalNote: 'All institutional clearances complete. Ready for Module 4 certificate minting.'
+    });
+    recordMultiSigVote('REQ-2024-002', 'DAC_COMMITTEE', 'VOTER-1', 'Dr. Rajesh Kumar', 'HOD', 'APPROVE', 'SIG_DAC_1', 'Academic coursework approved');
+    recordMultiSigVote('REQ-2024-002', 'DAC_COMMITTEE', 'VOTER-2', 'Dr. Sunita Rao', 'DAC Member', 'APPROVE', 'SIG_DAC_2', 'Degree criteria satisfied');
+    recordMultiSigVote('REQ-2024-002', 'DEAN_COUNCIL', 'VOTER-3', 'Dr. Vikram Malhotra', 'Dean Academic', 'APPROVE', 'SIG_DEAN_1', 'Curricular integrity validated');
+    recordMultiSigVote('REQ-2024-002', 'DEAN_COUNCIL', 'VOTER-4', 'Dr. Anand Patel', 'Dean Research', 'APPROVE', 'SIG_DEAN_2', 'Institutional approval granted');
+  }
+
+  const req3 = autoCreateRequestForStudent('STU-2024-003', 'REQ-2024-003');
+  if (req3) {
+    updateCertificateRequestStatus('REQ-2024-003', 'DEAN_APPROVED', {
+      preEndorsed: true,
+      approvalNote: 'Approved up to Dean. Pending Registrar clearance of statutory fees/library dues.'
+    });
+  }
+
+  autoCreateRequestForStudent('STU-2024-004', 'REQ-2024-004');
+  autoCreateRequestForStudent('STU-2024-005', 'REQ-2024-005');
+
+  const req6 = autoCreateRequestForStudent('STU-2024-006', 'REQ-2024-006');
+  if (req6) {
+    updateCertificateRequestStatus('REQ-2024-006', 'CERTIFICATE_ISSUED', {
+      certId: 'CERT-2024-006',
+      ipfsHash: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+      docHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    });
+    saveCertificate({
+      certId: 'CERT-2024-006',
+      requestId: 'REQ-2024-006',
+      studentId: 'STU-2024-006',
+      studentName: 'Vikram Malhotra',
+      studentDid: generateStudentDID('Vikram Malhotra', 'STU-2024-006'),
+      department: 'Department of Computer Science & Engineering',
+      certType: 'Bachelor of Technology in Computer Science & Engineering (B.Tech CSE)',
+      ipfsHash: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG',
+      docHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      issueDate: '2024-11-15T10:00:00.000Z',
+      status: 'ISSUED'
+    });
+  }
+
+  autoCreateRequestForStudent('STU-2020-013', 'REQ-2020-013');
+}
+
+function cleanAndReseedDatabase() {
+  db.exec(`
+    DELETE FROM multisig_votes;
+    DELETE FROM certificates;
+    DELETE FROM certificate_requests;
+    DELETE FROM course_marks;
+    DELETE FROM course_enrollments;
+    DELETE FROM student_semester_registrations;
+    DELETE FROM students;
+  `);
+
+  seedAllCoreData();
+  return { success: true, message: 'Database successfully cleaned and re-seeded with realistic demonstration personas.' };
+}
+
+try {
+  seedAllCoreData();
+} catch (e) {
+  console.error('[SIS DB] Initial seed warning:', e.message);
+}
 
 module.exports = {
   db,
@@ -1407,5 +2008,12 @@ module.exports = {
   getCertificateRequestByCertId,
   getAllCertificateRequests,
   updateCertificateRequestStatus,
-  autoCreateRequestForStudent
+  autoCreateRequestForStudent,
+  saveCertificate,
+  getCertificate,
+  getCertificateByRequestId,
+  getAllCertificates,
+  autoApproveAndSignEligibleCourseMarks,
+  seedAllCoreData,
+  cleanAndReseedDatabase
 };

@@ -186,6 +186,7 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
       const data = await res.json();
       if (res.ok) {
         trackRequest(trackedRequest.requestId);
+        if (setActiveRequestId) setActiveRequestId(trackedRequest.requestId);
       } else {
         alert(`Approval error: ${data.error}`);
       }
@@ -431,7 +432,7 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
           <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.65rem 0.9rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Student ID: <strong>{trackedRequest.studentId}</strong></span>
-              <div style={{ fontSize: '0.78rem', color: 'var(--heading)', fontWeight: 600 }}>{trackedRequest.details?.name || 'Student'}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--heading)', fontWeight: 600 }}>{trackedRequest.studentName || trackedRequest.details?.name || 'Student'}</div>
             </div>
             <div>
               <span 
@@ -667,6 +668,40 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
                 <button className="btn-success" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }} onClick={() => advanceStage('admin-finalize', { comments: 'Dues cleared' })}>
                   🏛️ Finalize Administrative Clearance
                 </button>
+              )}
+              {(trackedRequest?.status === 'ADMIN_FINALIZED' || trackedRequest?.status === 'CERTIFICATE_ISSUED') && (
+                <div style={{
+                  marginTop: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '8px',
+                  background: 'var(--success-bg)',
+                  border: '1px solid var(--success-border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.6rem'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--success)', display: 'block' }}>
+                      ✅ Administration Cleared for {trackedRequest.studentName || trackedRequest.details?.name || trackedRequest.studentId}!
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Roll No: <strong>{trackedRequest.studentId}</strong> • {trackedRequest.certType || 'Degree Certificate'} — Ready for Module 4 Minting below.
+                    </span>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    onClick={() => {
+                      const mintTarget = document.getElementById('module4-minting-section') || document.getElementById('selectTargetReq');
+                      if (mintTarget) mintTarget.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    💎 Mint Certificate in Module 4 ↓
+                  </button>
+                </div>
               )}
             </div>
           </div>

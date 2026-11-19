@@ -122,6 +122,8 @@ export default function App() {
                   onSwitchToAgents={() => setActiveTab('agents')}
                 />
                 <IssuanceModule 
+                  activeRequestId={activeRequestId}
+                  setActiveRequestId={setActiveRequestId}
                   trackedRequest={readyRequest}
                   onCertificateIssued={() => setActiveTab('ledger')}
                 />
