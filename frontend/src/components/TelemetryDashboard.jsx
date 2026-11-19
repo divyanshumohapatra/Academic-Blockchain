@@ -21,10 +21,36 @@ export default function TelemetryDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/agent/health/telemetry`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      const data = await res.json();
-      setTelemetry(data);
+      const candidateUrls = [
+        `${API_BASE}/agent/health/telemetry`,
+        '/api/agent/health/telemetry',
+        '/api/telemetry',
+        'http://localhost:4000/api/agent/health/telemetry',
+        'http://localhost:4000/api/telemetry'
+      ];
+
+      let lastError = null;
+      let data = null;
+
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            data = await res.json();
+            break;
+          } else {
+            lastError = new Error(`HTTP ${res.status}: ${res.statusText} on ${url}`);
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (data) {
+        setTelemetry(data);
+      } else {
+        throw lastError || new Error('All telemetry endpoints unreachable');
+      }
     } catch (err) {
       console.error('Telemetry probe failed:', err);
       setError(err.message);

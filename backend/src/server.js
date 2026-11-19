@@ -69,23 +69,31 @@ app.get('/api/health', async (req, res) => {
 });
 
 // Autonomous Health Monitoring Agent Telemetry & Parity (Contributor 6.2)
-app.get('/api/agent/health/telemetry', async (req, res) => {
+const handleTelemetry = async (req, res) => {
   try {
     const telemetry = await healthAgent.getTelemetryReport();
     res.json(telemetry);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+};
+app.get('/api/agent/health/telemetry', handleTelemetry);
+app.get('/api/agents/health/telemetry', handleTelemetry);
+app.get('/api/health/telemetry', handleTelemetry);
+app.get('/api/telemetry', handleTelemetry);
 
-app.get('/api/agent/health/sync-parity', async (req, res) => {
+const handleSyncParity = async (req, res) => {
   try {
     const parity = await healthAgent.checkSyncParity();
     res.json(parity);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+};
+app.get('/api/agent/health/sync-parity', handleSyncParity);
+app.get('/api/agents/health/sync-parity', handleSyncParity);
+app.get('/api/health/sync-parity', handleSyncParity);
+app.get('/api/sync-parity', handleSyncParity);
 
 // ==========================================
 // 2. Module 1: Student Registration (with DID via SHA-256 + RIPEMD-160)
