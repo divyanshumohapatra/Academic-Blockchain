@@ -13,6 +13,7 @@ import FacultyAdvisorModule from './components/FacultyAdvisorModule';
 import ChatbotPortal from './components/ChatbotPortal';
 import ChatbotWidget from './components/ChatbotWidget';
 import TelemetryDashboard from './components/TelemetryDashboard';
+import ZKPassportSuite from './components/ZKPassportSuite';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -24,7 +25,8 @@ import {
   GraduationCap,
   Users,
   MessageSquare,
-  Activity
+  Activity,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function App() {
@@ -131,6 +133,20 @@ export default function App() {
               </button>
 
               <button 
+                className={`tab-btn ${activeTab === 'passport' ? 'active' : ''}`}
+                onClick={() => setActiveTab('passport')}
+                style={{
+                  background: activeTab === 'passport' ? 'linear-gradient(135deg, #312e81, #7c3aed)' : 'rgba(124, 58, 237, 0.08)',
+                  borderColor: 'rgba(124, 58, 237, 0.3)',
+                  color: activeTab === 'passport' ? '#ffffff' : '#7c3aed',
+                  fontWeight: '700'
+                }}
+              >
+                <ShieldCheck size={16} />
+                🛡️ ZK-Passport & Privacy
+              </button>
+
+              <button 
                 className={`tab-btn ${activeTab === 'telemetry' ? 'active' : ''}`}
                 onClick={() => setActiveTab('telemetry')}
               >
@@ -181,6 +197,8 @@ export default function App() {
             )}
 
             {activeTab === 'ledger' && <LedgerExplorer />}
+
+            {activeTab === 'passport' && <ZKPassportSuite />}
 
             {activeTab === 'telemetry' && <TelemetryDashboard />}
           </>

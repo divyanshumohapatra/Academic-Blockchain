@@ -41,6 +41,7 @@ services:
     volumes:
       - ../frontend/server.js:/app/server.js
       - ../frontend/public:/app/public
+      - ../frontend/dist:/app/dist
     ports:
       - "3000:3000"
     networks:
