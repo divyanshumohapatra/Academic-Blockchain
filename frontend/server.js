@@ -7,10 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
-// Prefer built React dist directory, fallback to public
+// Prefer built React dist directory if index.html is present, fallback to public
 const DIST_DIR = path.join(__dirname, 'dist');
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const SERVE_DIR = fs.existsSync(DIST_DIR) ? DIST_DIR : PUBLIC_DIR;
+const SERVE_DIR = (fs.existsSync(DIST_DIR) && fs.existsSync(path.join(DIST_DIR, 'index.html'))) ? DIST_DIR : PUBLIC_DIR;
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -56,6 +56,8 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/' || pathname === '') {
     pathname = '/index.html';
+  } else if (pathname === '/verify') {
+    pathname = '/verify.html';
   }
 
   let filePath = path.join(SERVE_DIR, pathname);
