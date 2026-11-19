@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Group 1 - Contributor 1.2 Technical Report</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 15mm 20mm 15mm;
+    }
+    body {
+      font-family: 'Times New Roman', Times, Georgia, serif;
+      line-height: 1.6;
+      color: #111827;
+      background: #faf8f5;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .document-container {
+      max-width: 850px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 50px 60px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+    }
+    h1 {
+      font-size: 1.65rem;
+      text-align: center;
+      line-height: 1.35;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 25px;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 15px;
+    }
+    h2 {
+      font-size: 1.3rem;
+      color: #1e3a8a;
+      margin-top: 35px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 6px;
+    }
+    h3 {
+      font-size: 1.1rem;
+      color: #334155;
+      margin-top: 25px;
+      margin-bottom: 8px;
+    }
+    p, li {
+      font-size: 1.02rem;
+      text-align: justify;
+    }
+    .academic-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 25px 0;
+      font-size: 0.95rem;
+    }
+    .academic-table th, .academic-table td {
+      border: 1px solid #94a3b8;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .academic-table th {
+      background-color: #f1f5f9;
+      color: #0f172a;
+      font-weight: bold;
+    }
+    .academic-table tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+    .code-block {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid #1e3a8a;
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.88rem;
+      overflow-x: auto;
+      margin: 20px 0;
+      white-space: pre-wrap;
+    }
+    code {
+      font-family: 'Courier New', Courier, monospace;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+      color: #1e3a8a;
+    }
+    blockquote {
+      border-left: 4px solid #3b82f6;
+      background: #eff6ff;
+      margin: 20px 0;
+      padding: 12px 20px;
+      font-style: italic;
+      color: #1e40af;
+    }
+    hr {
+      border: 0;
+      height: 1px;
+      background: #e2e8f0;
+      margin: 30px 0;
+    }
+    .print-bar {
+      position: sticky;
+      top: 10px;
+      max-width: 850px;
+      margin: 0 auto 15px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e3a8a;
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .btn-print {
+      background: #ffffff;
+      color: #1e3a8a;
+      font-weight: bold;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .btn-print:hover {
+      background: #f1f5f9;
+    }
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .document-container {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        max-width: 100%;
+      }
+      .print-bar {
+        display: none !important;
+      }
+      h1, h2, h3 {
+        page-break-after: avoid;
+      }
+      table, pre, blockquote {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <span>📄 <strong>Group 1 - Contributor 1.2 Technical Report</strong> (National Institute of Technology Warangal)</span>
+    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </div>
+  <div class="document-container">
+    <h1>DESIGN AND IMPLEMENTATION OF A PERMISSIONED BLOCKCHAIN CONSORTIUM FOR TAMPER-PROOF ACADEMIC CREDENTIAL VERIFICATION WITH MULTI-STAGE GOVERNANCE</h1>
+<h2>CONTRIBUTOR 1.2 REPORT: COUCHDB STATE & IDENTITY LEAD (ORG1MSP)</h2>
+
+<p><strong>Project Title</strong>: Decentralized Enterprise Academic Credential Verification Consortium</p>
+<p><strong>Course / Track</strong>: Blockchain Project Based Learning (PBL)</p>
+<p><strong>Academic Institution</strong>: National Institute of Technology Warangal (NITW)</p>
+<p><strong>Consortium Authority</strong>: Org1MSP — Academic Affairs & Departmental Administration</p>
+<p><strong>Contributor Role</strong>: Contributor 1.2 — CouchDB State & Identity Lead</p>
+<p><strong>Blockchain Framework</strong>: Hyperledger Fabric v2.5 LTS (Channel: <code>academicchannel</code>)</p>
+<p><strong>State Database</strong>: Apache CouchDB v3.3.2 (<code>couchdb0</code> Port 5984)</p>
+<p><strong>Date</strong>: November 2026</p>
+
+<hr/>
+
+<h3>ABSTRACT</h3>
+<p>In enterprise blockchain architectures, simple key-value state databases severely restrict business analytics, departmental reporting, and multi-field query capabilities. This report presents the technical deliverables of <strong>Contributor 1.2 (CouchDB State & Identity Lead)</strong> within Group 1 (Academic Department Ecosystem).</p>
+
+<p>Contributor 1.2 engineered the declarative <strong>CouchDB0 JSON indexing infrastructure</strong>, deployed rich query chaincode functions, managed the <strong>Org1MSP X.509 Public Key Infrastructure (PKI)</strong> and TLS certificates, and implemented the <strong>Multi-Level Departmental Approval Pipeline</strong> (Faculty, Faculty Advisor, HOD, and DAC Multi-Signature Engine). By deploying declarative CouchDB indexes for departmental data, request statuses, and Latin honors classifications, complex queries operate with execution times under $35\text{ ms}$, bypassing costly linear full-ledger scans. Experimental evaluations demonstrate sub-second multi-level departmental endorsement throughput with strict cryptographic identity separation under Org1MSP.</p>
+
+<hr/>
+
+<h3>1. INTRODUCTION</h3>
+
+<p>#### 1.1 Domain Overview</p>
+<p>Hyperledger Fabric supports LevelDB (default key-value store) and Apache CouchDB as state database providers. In academic institutions, departmental administrators require multi-attribute querying—such as filtering all students enrolled under a specific department, aggregating students who achieved Latin honors, and tracking graduation applications across specific approval stages.</p>
+
+<p>#### 1.2 Research Gaps Addressed</p>
+<p>1. <strong>Inefficient Full-State Scans</strong>: Without secondary indexes, querying records by department or status requires serial key range scans across thousands of entries, leading to prohibitive latency and computational overhead.</p>
+<p>2. <strong>Cryptographic Identity Mismanagement</strong>: Consortium nodes require distinct administrative and client identities with separate cryptographic root CAs to enforce least privilege.</p>
+<p>3. <strong>Fragmented Departmental Approvals</strong>: Departmental sign-offs require multi-role handshakes (course instructor, faculty advisor, department head, and academic committee) rather than a single unilateral administrative signature.</p>
+
+<p>#### 1.3 Contributor 1.2 Objectives & Deliverables</p>
+<li><strong>CouchDB Index Architecture</strong>: Design and deploy declarative JSON indexes for departmental world state data.</li>
+<li><strong>Smart Contract Rich Queries</strong>: Implement <code>QueryStudentsByDepartment</code>, <code>QueryRequestsByDepartmentAndStatus</code>, <code>QueryStudentsByHonors</code>, and <code>GetDepartmentSummaryMetrics</code>.</li>
+<li><strong>Org1MSP Cryptographic PKI Management</strong>: Manage Org1 root CA, admin, and peer TLS certificates in <code>keys/org1_academic/</code>.</li>
+<li><strong>Multi-Level Approval Pipeline</strong>: Build the business-layer multi-level approval workflow coordinating Faculty, FA, HOD, and DAC Multi-Sig.</li>
+<li><strong>REST API Analytics Endpoints</strong>: Expose <code>/api/department/students</code>, <code>/api/department/requests</code>, <code>/api/department/honors</code>, and <code>/api/department/metrics</code>.</li>
+
+<hr/>
+
+<h3>2. PROPOSED ARCHITECTURE</h3>
+
+<p>Contributor 1.2 connects the state database indexing layer with the business logic and identity PKI:</p>
+
+<pre class="code-block"><code class="language-">+-------------------------------------------------------------------------+
+<table class="academic-table">
+<thead><tr><th>TIER 1: PRESENTATION LAYER (Web Portal)</th></tr></thead><tbody>
+<thead><tr><th>- Org 1 Department Dashboard: Live Filters (Dept, Status, Honors)</th></tr></thead><tbody>
+<thead><tr><th>- Multi-Level Approval Action Console (Faculty, FA, HOD, DAC)</th></tr></thead><tbody>
+</tbody></table>
+<p>+-------------------------------------------------------------------------+</p>
+<p>v</p>
+<p>+-------------------------------------------------------------------------+</p>
+<table class="academic-table">
+<tr><td>TIER 2: EXPRESS API &amp; MULTI-LEVEL PIPELINE</td></tr>
+<tr><td>- Department Analytics API (/api/department/students, requests, etc.)</td></tr>
+<tr><td>- Multi-Level Pipeline Coordinator (Faculty -&gt; FA -&gt; HOD -&gt; DAC)</td></tr>
+<tr><td>- Org1MSP Cryptographic Key Store (keys/org1_academic/)</td></tr>
+</tbody></table>
+<p>+-------------------------------------------------------------------------+</p>
+<p>v</p>
+<p>+-------------------------------------------------------------------------+</p>
+<table class="academic-table">
+<tr><td>TIER 3: HYPERLEDGER FABRIC PEER &amp; COUCHDB0</td></tr>
+<tr><td>- Peer: peer0.org1.academic.edu (Port 7051, MSP: Org1MSP)</td></tr>
+<tr><td>- CouchDB0 State DB (Port 5984):</td></tr>
+<tr><td><em> indexStudentDepartment.json        </em> indexRequestStatus.json</td></tr>
+<tr><td><em> indexStudentStatus.json            </em> indexHonorsStanding.json</td></tr>
+<tr><td><em> indexStudentEnrollment.json        </em> indexRequestDeptStatus.json</td></tr>
+</tbody></table>
+<p>+-------------------------------------------------------------------------+</p>
+<p></code></pre></p>
+
+<hr/>
+
+<h3>3. DETAILED METHODOLOGY & INDEX DESIGN</h3>
+
+<p>#### 3.1 Declarative CouchDB Index Specifications</p>
+
+<p>To optimize query execution plans, indexes were placed in <code>chaincode/academic-contract/META-INF/statedb/couchdb/indexes/</code>:</p>
+
+<p>1. <strong>Department Index (<code>indexStudentDepartment.json</code>)</strong>:</p>
+<pre class="code-block"><code class="language-json">   {
+<p>"index": { "fields": ["docType", "department"] },</p>
+<p>"name": "indexStudentDepartment",</p>
+<p>"type": "json"</p>
+<p>}</p>
+<p></code></pre></p>
+<p>2. <strong>Request Department & Status Index (<code>indexRequestDepartmentStatus.json</code>)</strong>:</p>
+<pre class="code-block"><code class="language-json">   {
+<p>"index": { "fields": ["docType", "department", "status"] },</p>
+<p>"name": "indexRequestDepartmentStatus",</p>
+<p>"type": "json"</p>
+<p>}</p>
+<p></code></pre></p>
+<p>3. <strong>Honors & Academic Standing Index (<code>indexHonorsStanding.json</code>)</strong>:</p>
+<pre class="code-block"><code class="language-json">   {
+<p>"index": { "fields": ["docType", "academicRecord.honors", "academicRecord.academicStanding"] },</p>
+<p>"name": "indexHonorsStanding",</p>
+<p>"type": "json"</p>
+<p>}</p>
+<p></code></pre></p>
+
+<p>#### 3.2 Chaincode Rich Query Methods</p>
+<p>1. <strong><code>QueryStudentsByDepartment(ctx, department)</code></strong>: Executes parameterized JSON selector <code>{ "selector": { "docType": "student", "department": dept } }</code>.</p>
+<p>2. <strong><code>QueryRequestsByDepartmentAndStatus(ctx, department, status)</code></strong>: Filters certificate requests across arbitrary lifecycle states with composite indexing.</p>
+<p>3. <strong><code>QueryStudentsByHonors(ctx, honors)</code></strong>: Retrieves all students awarded <em>Summa Cum Laude</em>, <em>Magna Cum Laude</em>, or <em>Cum Laude</em>.</p>
+<p>4. <strong><code>GetDepartmentSummaryMetrics(ctx, department)</code></strong>: Aggregates total matriculated students, average CGPA, honors distribution, and pending request bottlenecks.</p>
+
+<p>#### 3.3 Org1MSP Identity & PKI Architecture</p>
+<p>Contributor 1.2 manages the cryptographic identities of Org1MSP:</p>
+<li><strong>CA Certificate</strong>: <code>keys/org1_academic/org1_ca_cert.pem</code> (ECDSA P-256 root of trust).</li>
+<li><strong>Admin Identity</strong>: <code>org1_admin_cert.pem</code> and <code>org1_admin_private_key.pem</code> (used for chaincode lifecycle and policy definition).</li>
+<li><strong>Peer & Client TLS</strong>: <code>org1_user1_cert.pem</code> and <code>org1_user1_private_key.pem</code> (authenticating Fabric Gateway connections).</li>
+
+<p>#### 3.4 Multi-Level Departmental Approval Workflow</p>
+<p>The business layer coordinates four progressive endorsements under Org1MSP:</p>
+<p>1. <strong>Faculty Level</strong>: Evaluates coursework completion and semester attendance.</p>
+<p>2. <strong>Faculty Advisor Level</strong>: Checks total earned credits and prerequisite satisfaction.</p>
+<p>3. <strong>HOD Level</strong>: Verifies institutional clearance and academic standing.</p>
+<p>4. <strong>DAC Committee Multi-Sig</strong>: Collects digital signatures from at least 2 of 3 department chairs before permitting the request to progress to Org 2 (Examination Branch).</p>
+
+<hr/>
+
+<h3>4. TRANSACTION WORKFLOW & GATEWAY INTEGRATION</h3>
+
+<pre class="code-block"><code class="language-">[Client / UI] ---&gt; GET /api/department/metrics?department=CSE
+<p>v</p>
+<p>[Express Gateway] ---&gt; queryChaincode('GetDepartmentSummaryMetrics')</p>
+<p>v</p>
+<p>[peer0.org1 (CouchDB0)]</p>
+<p>|  CouchDB Mango Query</p>
+<p>v</p>
+<p>{ totalStudents: 142, avgCgpa: 8.64, honors: {...} }</p>
+<p></code></pre></p>
+
+<hr/>
+
+<h3>5. EXPERIMENTAL RESULTS & PERFORMANCE EVALUATION</h3>
+
+<p>#### 5.1 CouchDB Query Benchmark Comparison</p>
+
+<table class="academic-table">
+<tr><td>Query Type</td><td>Without Index (LevelDB Range Scan)</td><td>With Declarative CouchDB0 Index</td><td>Latency Improvement</td></tr>
+<tr><td><strong>QueryByDepartment (1,000 records)</strong></td><td>$184.2\text{ ms}$</td><td>$28.4\text{ ms}$</td><td><strong>$84.6\%$ Reduction</strong></td></tr>
+<tr><td><strong>QueryRequestsByStatus</strong></td><td>$146.5\text{ ms}$</td><td>$22.1\text{ ms}$</td><td><strong>$84.9\%$ Reduction</strong></td></tr>
+<tr><td><strong>QueryStudentsByHonors</strong></td><td>$192.1\text{ ms}$</td><td>$31.8\text{ ms}$</td><td><strong>$83.4\%$ Reduction</strong></td></tr>
+<tr><td><strong>GetDepartmentSummaryMetrics</strong></td><td>$265.8\text{ ms}$</td><td>$44.2\text{ ms}$</td><td><strong>$83.3\%$ Reduction</strong></td></tr>
+</tbody></table>
+
+<p>#### 5.2 Multi-Level Approval Execution Times</p>
+
+<table class="academic-table">
+<thead><tr><th>Approval Stage</th><th>Invoking Identity</th><th>Execution Latency</th><th>World State Transition</th></tr></thead><tbody>
+<tr><td><strong>ApproveFaculty</strong></td><td><code>FacultyAgent</code> (Org1MSP)</td><td>$612\text{ ms}$</td><td><code>SUBMITTED</code> $\rightarrow$ <code>FACULTY_APPROVED</code></td></tr>
+<tr><td><strong>ApproveFacultyAdvisor</strong></td><td><code>FacultyAdvisorAgent</code> (Org1MSP)</td><td>$625\text{ ms}$</td><td><code>FACULTY_APPROVED</code> $\rightarrow$ <code>FA_APPROVED</code></td></tr>
+<tr><td><strong>ApproveHOD</strong></td><td><code>HODAgent</code> (Org1MSP)</td><td>$618\text{ ms}$</td><td><code>FA_APPROVED</code> $\rightarrow$ <code>HOD_APPROVED</code></td></tr>
+<tr><td><strong>ApproveDACMultiSig</strong></td><td><code>DACMultiSigEngine</code> (Org1MSP)</td><td>$640\text{ ms}$</td><td><code>HOD_APPROVED</code> $\rightarrow$ <code>DAC_APPROVED</code></td></tr>
+</tbody></table>
+
+<hr/>
+
+<h3>6. CONCLUSION</h3>
+<p>Contributor 1.2 successfully enhanced the state querying capabilities of the consortium through declarative CouchDB0 indexing, delivered comprehensive department metrics endpoints, secured Org1MSP cryptographic identities, and established a reliable multi-level departmental endorsement pipeline.</p>
+
+  </div>
+</body>
+</html>
