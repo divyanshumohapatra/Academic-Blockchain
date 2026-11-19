@@ -1792,8 +1792,28 @@ app.get('/api/agents/audit/:requestId', async (req, res) => {
 
 app.post('/api/agents/fraud-scan', async (req, res) => {
   try {
-    const result = await fraudAgent.evaluateRisk(req.body);
+    const options = req.body.options || {};
+    const result = await fraudAgent.evaluateRisk(req.body, null, options);
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agents/sentinel/simulate', async (req, res) => {
+  try {
+    const { scenario = 'CLEAN', requestId = 'REQ-2024-001' } = req.body;
+    const result = await fraudAgent.simulateScenario(scenario, requestId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/agents/sentinel/telemetry', (req, res) => {
+  try {
+    const stats = fraudAgent.getTelemetry();
+    res.json(stats);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

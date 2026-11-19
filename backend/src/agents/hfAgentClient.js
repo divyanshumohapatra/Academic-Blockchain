@@ -24,9 +24,10 @@ class HFAgentClient {
     this.groqUrl = 'https://api.groq.com/openai/v1/chat/completions';
     this.defaultGroqModel = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
     this.supportedGroqModels = [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
       'openai/gpt-oss-20b',
-      'qwen/qwen3.8-27b',
-      'openai/gpt-oss-120b'
+      'qwen/qwen3.8-27b'
     ];
 
     this.hfRouterUrl = 'https://router.huggingface.co/v1/chat/completions';
