@@ -14,6 +14,10 @@ echo "========================================================="
 # 1. Stop app containers
 docker compose -f docker/docker-compose-app.yaml down -v --remove-orphans 2>/dev/null || true
 
+# 1.1 Stop any local host processes if running outside Docker
+pkill -f "backend/src/server.js" 2>/dev/null || true
+pkill -f "frontend/server.js" 2>/dev/null || true
+
 # 2. Stop network containers & clean volumes
 bash network/network.sh down
 

@@ -293,13 +293,38 @@
                   <th>Crypto Identity</th>
                 </tr>
               </thead>
-                  <th>Email</th>
+              <tbody id="studentsTbody">
+                <tr><td colspan="6" class="empty-hint">Loading registered students...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- University SIS Database Reference Card -->
+        <div class="card full-width-card" style="grid-column: 1 / -1; margin-top: 1rem;">
+          <div class="card-title">
+            <h3>Authoritative University SIS Database (SQLite: <code>university_sis.db</code>)</h3>
+            <span class="step-num">Authoritative SIS</span>
+          </div>
+          <p class="subtitle">Official academic records stored in the University SIS database. Only students enrolled here can register on the blockchain. When a certificate is requested, these marks and clearance metrics are automatically verified by the autonomous AI agents.</p>
+          <div class="table-container">
+            <table id="sisTable">
+              <thead>
+                <tr>
+                  <th>Roll No</th>
+                  <th>Student Name</th>
                   <th>Department</th>
-                  <th>Year</th>
+                  <th>Attendance</th>
+                  <th>CIE Score</th>
+                  <th>CGPA</th>
+                  <th>Backlogs</th>
+                  <th>Capstone</th>
+                  <th>Dues</th>
+                  <th>Action</th>
                 </tr>
               </thead>
-              <tbody id="studentsTbody">
-                <tr><td colspan="5" class="empty-hint">Loading registered students...</td></tr>
+              <tbody id="sisTbody">
+                <tr><td colspan="10" class="empty-hint">Loading SIS records...</td></tr>
               </tbody>
             </table>
           </div>

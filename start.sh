@@ -27,7 +27,29 @@ bash network/network.sh up
 # 3. Build & Launch Backend API and Web Portal Containers
 echo ""
 echo "--> [Step 2/3] Starting Backend REST API and Web Portal..."
-docker compose -f docker/docker-compose-app.yaml up -d --build
+set +e
+docker compose -f "${DIR}/docker/docker-compose-app.yaml" up -d --build
+DOCKER_APP_STATUS=$?
+set -e
+
+if [ ${DOCKER_APP_STATUS} -ne 0 ]; then
+  echo ""
+  echo "⚠️ Docker build for web containers timed out or failed (likely Docker Hub IPv6 / network timeout)."
+  echo "--> Automatically falling back to launching Backend & Web Portal locally on host..."
+  
+  # Kill any stale local instances
+  pkill -f "backend/src/server.js" 2>/dev/null || true
+  pkill -f "frontend/server.js" 2>/dev/null || true
+  sleep 1
+
+  # Launch Backend locally in background
+  (cd "${DIR}/backend" && npm start > "${DIR}/backend.log" 2>&1) &
+  echo "   ✅ Backend REST API running locally (Port: 4000, Logs: backend.log)"
+
+  # Launch Frontend locally in background
+  (cd "${DIR}/frontend" && npm start > "${DIR}/frontend.log" 2>&1) &
+  echo "   ✅ Web Portal running locally (Port: 3000, Logs: frontend.log)"
+fi
 
 # 4. Verification Check
 echo ""

@@ -23,9 +23,36 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+const IS_DOCKER = fs.existsSync('/.dockerenv');
+const DEFAULT_HOST = IS_DOCKER ? 'backend-api' : '127.0.0.1';
+const BACKEND_HOST = process.env.BACKEND_HOST || DEFAULT_HOST;
+const BACKEND_PORT = parseInt(process.env.BACKEND_PORT, 10) || 4000;
+
 const server = http.createServer((req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   let pathname = urlObj.pathname;
+
+  // 1. Reverse proxy /api requests directly to backend REST API (Port 4000)
+  if (pathname.startsWith('/api')) {
+    const proxyReq = http.request({
+      host: BACKEND_HOST,
+      port: BACKEND_PORT,
+      path: req.url,
+      method: req.method,
+      headers: { ...req.headers, host: `${BACKEND_HOST}:${BACKEND_PORT}` }
+    }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    });
+
+    proxyReq.on('error', (err) => {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `Backend API unavailable on ${BACKEND_HOST}:${BACKEND_PORT}: ${err.message}` }));
+    });
+
+    req.pipe(proxyReq, { end: true });
+    return;
+  }
 
   if (pathname === '/' || pathname === '') {
     pathname = '/index.html';

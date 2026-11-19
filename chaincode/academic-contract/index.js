@@ -1,12 +1,18 @@
 'use strict';
 
-const crypto = require('crypto');
-
 let Contract;
 try {
   Contract = require('fabric-contract-api').Contract;
 } catch (e) {
   Contract = class MockContract {};
+}
+const crypto = require('crypto');
+
+function computeStudentDID(name, rollNumber) {
+  const rawInput = `${(name || '').trim().toLowerCase()}:${(rollNumber || '').trim().toUpperCase()}`;
+  const sha256Hash = crypto.createHash('sha256').update(rawInput, 'utf8').digest();
+  const ripemd160Hex = crypto.createHash('ripemd160').update(sha256Hash).digest('hex');
+  return `did:academic:${ripemd160Hex}`;
 }
 
 class AcademicContract extends Contract {
@@ -162,22 +168,21 @@ class AcademicContract extends Contract {
       docType: 'networkInit',
       initializedAt: timestamp,
       consortium: 'AcademicConsortium',
-      version: '1.1.0'
+      version: '2.0.0'
     };
     await ctx.stub.putState('NETWORK_INIT', Buffer.from(JSON.stringify(initMarker)));
     console.info('============= END : Initialize Academic Ledger ===========');
   }
 
   // ==========================================
-  // MODULE 1: Student Registration & Profile
-  // Contributor 1.1: Academic Chaincode Lead
+  // MODULE 1: Student Registration & Profile (with DID & Contributor 1.1 Lifecycle)
   // ==========================================
 
   /**
-   * Upgraded RegisterStudent with rich schema validation,
+   * Upgraded RegisterStudent with rich schema validation, DID generation,
    * Org1MSP client identity access control, and student identity lifecycle management.
    */
-  async RegisterStudent(ctx, studentId, name, email, department, enrollmentYear, profileJson) {
+  async RegisterStudent(ctx, studentId, name, email, department, enrollmentYear, profileJson, didInput) {
     console.info(`RegisterStudent: ${studentId}`);
     
     // 1. Enforce Org1MSP authorization
@@ -193,12 +198,25 @@ class AcademicContract extends Contract {
     }
 
     let parsedProfile = {};
+    let did = null;
+
     if (profileJson) {
-      try {
-        parsedProfile = typeof profileJson === 'string' ? JSON.parse(profileJson) : profileJson;
-      } catch (e) {
-        parsedProfile = {};
+      if (typeof profileJson === 'string' && profileJson.startsWith('did:')) {
+        did = profileJson;
+      } else {
+        try {
+          parsedProfile = typeof profileJson === 'string' ? JSON.parse(profileJson) : profileJson;
+          if (parsedProfile.did) did = parsedProfile.did;
+        } catch (e) {
+          parsedProfile = {};
+        }
       }
+    }
+    if (didInput) {
+      did = didInput;
+    }
+    if (!did) {
+      did = computeStudentDID(name, cleanStudentId);
     }
 
     const timestamp = this._getTxTimestamp(ctx);
@@ -226,6 +244,7 @@ class AcademicContract extends Contract {
     const student = {
       docType: 'student',
       studentId: cleanStudentId,
+      did,
       name: name.trim(),
       email: email.trim().toLowerCase(),
       department: (department || 'Computer Science & Engineering').trim(),
@@ -257,6 +276,7 @@ class AcademicContract extends Contract {
     };
 
     await ctx.stub.putState(`STUDENT_${cleanStudentId}`, Buffer.from(JSON.stringify(student)));
+    await ctx.stub.putState(`DID_${did}`, Buffer.from(cleanStudentId));
     return JSON.stringify(student);
   }
 
@@ -373,6 +393,13 @@ class AcademicContract extends Contract {
     await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
     return JSON.stringify(student);
   }
+    await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
+    
+    // Store reverse-lookup by DID
+    await ctx.stub.putState(`DID_${did}`, Buffer.from(studentId));
+
+    return JSON.stringify(student);
+  }
 
   async GetStudent(ctx, studentId) {
     const studentAsBytes = await ctx.stub.getState(`STUDENT_${studentId}`);
@@ -380,6 +407,15 @@ class AcademicContract extends Contract {
       throw new Error(`Student ${studentId} does not exist`);
     }
     return studentAsBytes.toString();
+  }
+
+  async GetStudentByDID(ctx, did) {
+    const studentIdBytes = await ctx.stub.getState(`DID_${did}`);
+    if (!studentIdBytes || studentIdBytes.length === 0) {
+      throw new Error(`No student found with DID ${did}`);
+    }
+    const studentId = studentIdBytes.toString();
+    return await this.GetStudent(ctx, studentId);
   }
 
   async studentExists(ctx, studentId) {
@@ -470,10 +506,10 @@ class AcademicContract extends Contract {
   }
 
   // =======================================================
-  // MODULE 2: Certificate Request & 7-Stage Approval State Machine
-  // Contributor 1.1: Academic Chaincode Lead (RequestCertificate with rich schema & prerequisite verification)
-  // SUBMITTED -> FACULTY_APPROVED -> HOD_APPROVED ->
-  // DAC_APPROVED -> EXAM_LOCKED -> DEAN_APPROVED -> ADMIN_FINALIZED
+  // MODULE 2: Certificate Request & Governance State Machine
+  // Contributor 1.1: Academic Chaincode Lead (RequestCertificate with rich schema, DID & prerequisite verification)
+  // SUBMITTED -> FACULTY_APPROVED -> FA_APPROVED / HOD_APPROVED ->
+  // DAC_APPROVED (Multi-Sig) -> EXAM_LOCKED -> DEAN_APPROVED (Multi-Sig) -> ADMIN_FINALIZED
   // =======================================================
 
   async RequestCertificate(ctx, requestId, studentId, certType, detailsJson) {
@@ -504,6 +540,7 @@ class AcademicContract extends Contract {
     }
 
     // 4. Parse incoming request details
+    let studentData = student;
     let parsedDetails = {};
     if (detailsJson) {
       try {
@@ -570,7 +607,8 @@ class AcademicContract extends Contract {
       docType: 'certificateRequest',
       requestId: cleanReqId,
       studentId: cleanStudentId,
-      studentName: student.name || parsedDetails.name || '',
+      studentName: student.name || parsedDetails.name || studentData.name || '',
+      studentDid: studentData.did || student.did || (typeof computeStudentDID === 'function' ? computeStudentDID(student.name || 'Student', cleanStudentId) : `did:academic:nitw:${cleanStudentId.toLowerCase()}`),
       department: student.department || parsedDetails.department || 'Computer Science & Engineering',
       certType: certType || 'Degree Certificate',
       details: parsedDetails,
@@ -601,6 +639,8 @@ class AcademicContract extends Contract {
         verifiedAt: timestamp
       },
       status: 'SUBMITTED',
+      dacSignatures: {},
+      deanBoardSignatures: {},
       createdAt: timestamp,
       updatedAt: timestamp,
       history: [
@@ -617,21 +657,83 @@ class AcademicContract extends Contract {
     return JSON.stringify(certificateRequest);
   }
 
+  // Step 1: Faculty Approval
   async ApproveFaculty(ctx, requestId, facultyId, comments) {
-    return await this._transitionState(ctx, requestId, 'SUBMITTED', 'FACULTY_APPROVED', facultyId, comments || 'Faculty approval granted');
+    return await this._transitionState(ctx, requestId, ['SUBMITTED'], 'FACULTY_APPROVED', facultyId, comments || 'Faculty approval granted');
   }
 
+  // Step 2: Faculty Advisor Approval (Cross-Course Audit Gate)
+  async ApproveFacultyAdvisor(ctx, requestId, advisorId, comments, faSignature) {
+    const request = await this._getRequestObject(ctx, requestId);
+    if (request.status !== 'FACULTY_APPROVED' && request.status !== 'SUBMITTED') {
+      throw new Error(`Invalid stage transition for Faculty Advisor. Expected FACULTY_APPROVED or SUBMITTED, current is ${request.status}`);
+    }
+
+    const timestamp = this._getTxTimestamp(ctx);
+    request.status = 'FA_APPROVED';
+    request.facultyAdvisorSignature = faSignature || `SIG_FA_${advisorId}_${Date.now()}`;
+    request.updatedAt = timestamp;
+    request.history.push({
+      stage: 'FA_APPROVED',
+      updatedBy: advisorId || 'FacultyAdvisor',
+      signature: request.facultyAdvisorSignature,
+      timestamp,
+      comments: comments || 'Faculty Advisor verified all course requirements and endorsed candidate'
+    });
+
+    await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(request)));
+    return JSON.stringify(request);
+  }
+
+  // Backward compatibility alias: ApproveHOD
   async ApproveHOD(ctx, requestId, hodId, comments) {
-    return await this._transitionState(ctx, requestId, 'FACULTY_APPROVED', 'HOD_APPROVED', hodId, comments || 'HOD recommendation approved');
+    return await this._transitionState(ctx, requestId, ['FACULTY_APPROVED', 'FA_APPROVED'], 'HOD_APPROVED', hodId, comments || 'HOD recommendation approved');
   }
 
+  // Backward compatibility alias: ApproveDAC
   async ApproveDAC(ctx, requestId, dacMemberId, comments) {
-    return await this._transitionState(ctx, requestId, 'HOD_APPROVED', 'DAC_APPROVED', dacMemberId, comments || 'Department Academic Committee approval complete');
+    return await this._transitionState(ctx, requestId, ['HOD_APPROVED', 'FA_APPROVED', 'FACULTY_APPROVED'], 'DAC_APPROVED', dacMemberId, comments || 'DAC approval complete');
   }
 
+  // Step 3: HOD + DAC Majority Multi-Sig Approval (Requires >= 2 of 3 member signatures)
+  async ApproveDACMultiSig(ctx, requestId, memberId, memberSignature, comments) {
+    const request = await this._getRequestObject(ctx, requestId);
+    const validPreStates = ['FA_APPROVED', 'FACULTY_APPROVED', 'HOD_APPROVED', 'SUBMITTED'];
+    if (!validPreStates.includes(request.status) && request.status !== 'DAC_APPROVED') {
+      throw new Error(`Cannot vote in DAC Multi-Sig. Request is in status ${request.status}`);
+    }
+
+    request.dacSignatures = request.dacSignatures || {};
+    const timestamp = this._getTxTimestamp(ctx);
+    request.dacSignatures[memberId] = {
+      memberId,
+      signature: memberSignature || `SIG_DAC_${memberId}_${Date.now()}`,
+      timestamp,
+      comments: comments || 'DAC member vote recorded'
+    };
+
+    const signatureCount = Object.keys(request.dacSignatures).length;
+    const requiredMajority = 2; // Majority threshold: 2 of 3
+
+    if (signatureCount >= requiredMajority && request.status !== 'DAC_APPROVED') {
+      request.status = 'DAC_APPROVED';
+      request.history.push({
+        stage: 'DAC_APPROVED',
+        updatedBy: `DAC_MULTISIG_QUORUM (${signatureCount}/3)`,
+        timestamp,
+        comments: `DAC majority consensus satisfied (${signatureCount}/3 signatures collected)`
+      });
+    }
+
+    request.updatedAt = timestamp;
+    await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(request)));
+    return JSON.stringify(request);
+  }
+
+  // Step 4: Org 2 Examination Grade Lockdown
   async LockExamGrades(ctx, requestId, examOfficerId, gradesHash, comments) {
     const request = await this._getRequestObject(ctx, requestId);
-    if (request.status !== 'DAC_APPROVED') {
+    if (request.status !== 'DAC_APPROVED' && request.status !== 'HOD_APPROVED') {
       throw new Error(`Invalid stage transition. Expected DAC_APPROVED, but current status is ${request.status}`);
     }
 
@@ -651,18 +753,55 @@ class AcademicContract extends Contract {
     return JSON.stringify(request);
   }
 
-  async ApproveDean(ctx, requestId, deanId, comments) {
-    return await this._transitionState(ctx, requestId, 'EXAM_LOCKED', 'DEAN_APPROVED', deanId, comments || 'Dean Academic sanction granted');
-  }
-
-  async FinalizeAdmin(ctx, requestId, adminId, comments) {
-    return await this._transitionState(ctx, requestId, 'DEAN_APPROVED', 'ADMIN_FINALIZED', adminId, comments || 'Administration final clearance verified for issuance');
-  }
-
-  async _transitionState(ctx, requestId, expectedCurrentState, targetState, actorId, comments) {
+  // Step 5: Dean Academics & Senate Board Majority Multi-Sig Approval (>= 2 of 3)
+  async ApproveDeanMultiSig(ctx, requestId, boardMemberId, boardMemberSignature, comments) {
     const request = await this._getRequestObject(ctx, requestId);
-    if (request.status !== expectedCurrentState) {
-      throw new Error(`Invalid stage transition. Request ${requestId} is in status '${request.status}', expected '${expectedCurrentState}'`);
+    if (request.status !== 'EXAM_LOCKED' && request.status !== 'DEAN_APPROVED') {
+      throw new Error(`Cannot vote in Dean Board Multi-Sig. Request is in status ${request.status}, expected EXAM_LOCKED`);
+    }
+
+    request.deanBoardSignatures = request.deanBoardSignatures || {};
+    const timestamp = this._getTxTimestamp(ctx);
+    request.deanBoardSignatures[boardMemberId] = {
+      boardMemberId,
+      signature: boardMemberSignature || `SIG_DEAN_${boardMemberId}_${Date.now()}`,
+      timestamp,
+      comments: comments || 'Dean Senate Board vote recorded'
+    };
+
+    const signatureCount = Object.keys(request.deanBoardSignatures).length;
+    const requiredMajority = 2; // Majority threshold: 2 of 3
+
+    if (signatureCount >= requiredMajority && request.status !== 'DEAN_APPROVED') {
+      request.status = 'DEAN_APPROVED';
+      request.history.push({
+        stage: 'DEAN_APPROVED',
+        updatedBy: `DEAN_BOARD_QUORUM (${signatureCount}/3)`,
+        timestamp,
+        comments: `Dean Academic Board majority consensus satisfied (${signatureCount}/3 signatures collected)`
+      });
+    }
+
+    request.updatedAt = timestamp;
+    await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(request)));
+    return JSON.stringify(request);
+  }
+
+  // Backward compatibility alias: ApproveDean
+  async ApproveDean(ctx, requestId, deanId, comments) {
+    return await this._transitionState(ctx, requestId, ['EXAM_LOCKED'], 'DEAN_APPROVED', deanId, comments || 'Dean Academic sanction granted');
+  }
+
+  // Step 6: Admin Finalization
+  async FinalizeAdmin(ctx, requestId, adminId, comments) {
+    return await this._transitionState(ctx, requestId, ['DEAN_APPROVED'], 'ADMIN_FINALIZED', adminId, comments || 'Administration final clearance verified for issuance');
+  }
+
+  async _transitionState(ctx, requestId, expectedStates, targetState, actorId, comments) {
+    const request = await this._getRequestObject(ctx, requestId);
+    const expected = Array.isArray(expectedStates) ? expectedStates : [expectedStates];
+    if (!expected.includes(request.status)) {
+      throw new Error(`Invalid stage transition. Request ${requestId} is in status '${request.status}', expected one of [${expected.join(', ')}]`);
     }
 
     const timestamp = this._getTxTimestamp(ctx);
@@ -730,11 +869,14 @@ class AcademicContract extends Contract {
       // fallback
     }
 
+    const did = studentData.did || computeStudentDID(studentData.name || 'Student', studentId);
+
     const certificate = {
       docType: 'certificate',
       certId,
       requestId: requestId || '',
       studentId,
+      studentDid: did,
       studentName: studentData.name || '',
       department: studentData.department || '',
       certType: certType || 'Degree Certificate',
@@ -753,6 +895,9 @@ class AcademicContract extends Contract {
     // Store hash mapping for O(1) reverse lookup by file hash
     await ctx.stub.putState(`HASH_${docHash}`, Buffer.from(certId));
 
+    // Store DID mapping for reverse lookup by student DID
+    await ctx.stub.putState(`CERT_DID_${did}`, Buffer.from(certId));
+
     // Update request state if linked
     if (requestObj) {
       requestObj.status = 'CERTIFICATE_ISSUED';
@@ -762,7 +907,7 @@ class AcademicContract extends Contract {
         stage: 'CERTIFICATE_ISSUED',
         updatedBy: issuerMsp,
         timestamp,
-        comments: `Certificate issued with ID ${certId} and IPFS CID ${ipfsHash}`
+        comments: `Certificate issued with ID ${certId}, DID ${did}, and IPFS CID ${ipfsHash}`
       });
       await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(requestObj)));
     }
@@ -810,6 +955,22 @@ class AcademicContract extends Contract {
         docHash,
         verificationStatus: 'INVALID',
         message: 'No certificate matching this SHA-256 hash found on ledger',
+        verified: false
+      });
+    }
+
+    const certId = certIdBytes.toString();
+    return await this.VerifyCertificate(ctx, certId);
+  }
+
+  async VerifyCertificateByDID(ctx, did) {
+    console.info(`VerifyCertificateByDID: ${did}`);
+    const certIdBytes = await ctx.stub.getState(`CERT_DID_${did}`);
+    if (!certIdBytes || certIdBytes.length === 0) {
+      return JSON.stringify({
+        did,
+        verificationStatus: 'INVALID',
+        message: `No certificate found associated with Student DID ${did}`,
         verified: false
       });
     }
