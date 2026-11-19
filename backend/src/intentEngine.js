@@ -14,6 +14,8 @@
 
 const { queryChaincode, checkNetworkHealth } = require('./fabric');
 const { checkIPFSHealth } = require('./ipfs');
+const r2 = require('./r2');
+const { ROLES } = require('./auth');
 
 let sisDatabase = null;
 try {
@@ -573,11 +575,21 @@ function answerDomainQuestion(text) {
            "• **Fault Tolerance**: Up to $(N-1)/2$ node crashes can be tolerated in a multi-node cluster without halting the consortium.";
   }
 
-  // 2. IPFS Storage
+  // 2. IPFS Storage & Cloudflare R2 Dual Archival
+  if (lower.includes('cloudflare') || lower.includes('r2') || lower.includes('backup')) {
+    return "### ☁️ Cloudflare R2 Enterprise Dual-Storage Architecture\n\n" +
+           "To guarantee high availability and disaster recovery alongside IPFS, the consortium implements a **Dual-Storage Archival Strategy**:\n\n" +
+           "• **Primary Layer**: Decentralized IPFS Kubo node pinning canonical encrypted PDF credentials and on-chain CIDs.\n" +
+           "• **Enterprise Backup Layer**: Cloudflare R2 S3-compatible object storage (`academic-certificates` bucket) via `@aws-sdk/client-s3`.\n" +
+           "• **Role-Based Access Control**: R2 object access and presigned download link generation are strictly restricted to Org 3 Central Administrators (`ADMIN`).\n" +
+           "• **Cryptographic Verification**: Both IPFS and R2 replicas share the exact same verifiable SHA-256 digest anchored into Hyperledger Fabric.";
+  }
+
   if (lower.includes('ipfs') || lower.includes('storage') || lower.includes('cid')) {
     return "### 🌐 Decentralized IPFS Storage Architecture\n\n" +
            "To maintain ledger efficiency while ensuring document immutability, we use a **Dual-Storage Paradigm**:\n\n" +
            "• **Off-Chain IPFS Kubo Node**: The full canonical PDF certificates and high-resolution credentials are encrypted and pinned to our IPFS node (`ipfs-node:5001/8080`).\n" +
+           "• **Cloudflare R2 Enterprise Backup**: Synchronously mirrored to Cloudflare R2 S3 storage for enterprise disaster recovery (restricted to Org 3 Admins).\n" +
            "• **On-Chain Cryptographic Anchoring**: The 46-character IPFS Content Identifier (CID, e.g. `Qm...`) and the SHA-256 cryptographic document digest are anchored into the Hyperledger Fabric ledger.\n" +
            "• **Zero Tampering**: Any alteration to the off-chain PDF produces a completely different SHA-256 digest, which fails on-chain verification instantly.";
   }
@@ -914,9 +926,78 @@ function generateReply(intent, entities, data, extra = null) {
 // 7. MASTER CHAT PROCESSOR PIPELINE
 // ============================================================================
 
-async function handleChatMessage(message) {
+async function handleChatMessage(message, context = {}) {
   if (!message || typeof message !== 'string') {
     return generateReply(INTENTS.GENERAL_HELP, {}, null);
+  }
+
+  const role = (context.role || 'STUDENT').toUpperCase();
+  const userName = context.name || context.user || role;
+  const lower = message.toLowerCase().trim();
+
+  // 0. Cloudflare R2 Storage & Presigned Link Queries (Admin Exclusive)
+  if (lower.includes('cloudflare') || lower.includes('r2') || (lower.includes('backup') && (lower.includes('storage') || lower.includes('link') || lower.includes('download')))) {
+    if (role !== ROLES.ADMIN) {
+      return {
+        reply: `### 🔒 Access Denied: Cloudflare R2 Enterprise Backup Storage\n\n` +
+               `• **Current Role**: \`${role}\` (${context.org || 'Standard Access'})\n` +
+               `• **Required Role**: \`ADMIN\` (Org 3 Central Administration)\n\n` +
+               `⚠️ Access to Cloudflare R2 enterprise backup storage, bucket introspection, and temporary presigned download links is strictly restricted to authorized Central Administrators.\n\n` +
+               `*To access Cloudflare R2 features, switch your role to **Administrator (Org 3)** in the Chatbot Organization selector.*`,
+        intent: 'RBAC_FORBIDDEN',
+        data: { currentRole: role, requiredRole: 'ADMIN' }
+      };
+    }
+
+    // Admin has authorized access to Cloudflare R2!
+    const certMatch = message.match(/CERT-[A-Za-z0-9-]+/i);
+    if (certMatch) {
+      const certId = certMatch[0].toUpperCase();
+      try {
+        const downloadLink = await r2.getDownloadLink(`certificates/${certId}.pdf`, 900);
+        return {
+          reply: `### ☁️ Cloudflare R2 Backup Dossier (Authorized: ${userName})\n\n` +
+                 `• **Certificate ID**: \`${certId}\`\n` +
+                 `• **Bucket**: \`${r2.BUCKET}\`\n` +
+                 `• **Primary Storage URI**: \`r2://${r2.BUCKET}/certificates/${certId}.pdf\`\n` +
+                 `• **Presigned Download URL** (Valid for 15 minutes):\n` +
+                 `  [🔗 Direct Download from Cloudflare R2](${downloadLink})\n\n` +
+                 `*Dual-Storage Archival Policy: Active (Primary IPFS Kubo + Cloudflare R2 Enterprise Backup).*`,
+          intent: 'R2_BACKUP_LINK',
+          data: { certId, downloadLink, role }
+        };
+      } catch (err) {
+        return {
+          reply: `⚠️ Error generating Cloudflare R2 download link for ${certId}: ${err.message}`,
+          intent: 'R2_ERROR'
+        };
+      }
+    }
+
+    const r2Health = await r2.checkR2Health();
+    return {
+      reply: `### ☁️ Cloudflare R2 Enterprise Backup Status (Authorized: ${userName})\n\n` +
+             `• **Status**: ${r2Health.healthy ? '🟢 ONLINE & OPERATIONAL' : '🟡 CONFIGURED (SIMULATED)'}\n` +
+             `• **Bucket**: \`${r2.BUCKET}\`\n` +
+             `• **S3 Endpoint**: \`${r2Health.endpoint || process.env.R2_S3_ENDPOINT}\`\n` +
+             `• **Access Tier**: Org 3 Central Administrator Exclusive\n` +
+             `• **Policy**: Synchronous dual-pinning along with IPFS Kubo for disaster recovery\n\n` +
+             `*Tip: As an Administrator, you can request a presigned download link by mentioning any Certificate ID (e.g. "Get Cloudflare R2 link for CERT-2024-001").*`,
+      intent: 'R2_STATUS',
+      data: r2Health
+    };
+  }
+
+  // Role-based restrictions for students querying privileged operations
+  if (role === ROLES.STUDENT && (lower.includes('lock grades') || lower.includes('lock grade') || lower.includes('submit marks') || lower.includes('enter marks') || lower.includes('revoke certificate'))) {
+    return {
+      reply: `### 🔒 Role-Restricted Operation\n\n` +
+             `• **Your Role**: \`${role}\` (Public / Student Portal)\n` +
+             `• **Restricted Capability**: Course grading, exam lockdown, and certificate revocation are privileged operations.\n\n` +
+             `Students can verify certificates, trace public lifecycle milestones, and inspect graduation clearance status. Switch to **Faculty (Org 1)**, **Exam Controller (Org 2)**, or **Admin (Org 3)** to perform institutional tasks.`,
+      intent: 'RBAC_FORBIDDEN',
+      data: { currentRole: role }
+    };
   }
 
   const entities = extractEntities(message);

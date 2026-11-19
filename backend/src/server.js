@@ -20,6 +20,8 @@ const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
 const { CertMintingMultiAgentEngine } = require('./agents/certMintingAgents');
 const sisDatabase = require('./db/sisDatabase');
+const r2 = require('./r2');
+const { ROLES, login, quickLoginByRole, verifySession, resolveUserFromRequest, requireRole, DEMO_ACCOUNTS } = require('./auth');
 
 const certMintingEngine = new CertMintingMultiAgentEngine();
 
@@ -43,10 +45,17 @@ app.get('/api/health', async (req, res) => {
   try {
     const network = await checkNetworkHealth();
     const ipfs = await checkIPFSHealth();
+    let r2Health = { healthy: false, mode: 'unconfigured' };
+    try {
+      r2Health = await r2.checkR2Health();
+    } catch (e) {
+      r2Health = { healthy: false, error: e.message };
+    }
     res.json({
       status: network.allHealthy ? 'UP' : 'PARTIAL',
       network,
       ipfs,
+      r2: r2Health,
       organizations: [
         { name: 'Org1 - University / Academic', msp: 'Org1MSP', peer: 'peer0.org1.academic.edu:7051' },
         { name: 'Org2 - Examination Board', msp: 'Org2MSP', peer: 'peer0.org2.academic.edu:8051' },
@@ -1823,12 +1832,21 @@ app.get('/api/agents/sentinel/telemetry', (req, res) => {
 
 app.post('/api/agents/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, role, user } = req.body;
     if (!message) {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const response = await chatAgent.processMessage(message);
+    const resolvedUser = resolveUserFromRequest(req);
+    const activeRole = role || req.headers['x-user-role'] || resolvedUser.role;
+    const context = {
+      role: activeRole,
+      name: user || resolvedUser.name,
+      org: resolvedUser.org,
+      department: resolvedUser.department
+    };
+
+    const response = await chatAgent.processMessage(message, context);
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1904,11 +1922,21 @@ function resolveLedgerKeys(rawKey) {
 // ============================================================================
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, role, user } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Field "message" (string) is required in request body.' });
     }
-    const response = await handleChatMessage(message);
+
+    const resolvedUser = resolveUserFromRequest(req);
+    const activeRole = role || req.headers['x-user-role'] || resolvedUser.role;
+    const context = {
+      role: activeRole,
+      name: user || resolvedUser.name,
+      org: resolvedUser.org,
+      department: resolvedUser.department
+    };
+
+    const response = await handleChatMessage(message, context);
     res.json(response);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2041,6 +2069,89 @@ app.get('/api/events', (req, res) => {
     removeListener();
     res.end();
   });
+});
+
+// ============================================================================
+// Group 6: Consortium Authentication & RBAC Access Control
+// ============================================================================
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+    if (role && !email) {
+      const session = quickLoginByRole(role);
+      return res.json({ success: true, session });
+    }
+    const session = login(email, password);
+    res.json({ success: true, session });
+  } catch (err) {
+    res.status(401).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const user = resolveUserFromRequest(req);
+  res.json({ user });
+});
+
+app.get('/api/auth/roles', (req, res) => {
+  res.json({
+    roles: Object.values(ROLES),
+    demoAccounts: [
+      { role: ROLES.STUDENT, name: 'Alice Johnson', email: 'alice.johnson@academic.edu', org: 'Public / Candidate Portal', description: 'Student Degree & Status Verification' },
+      { role: ROLES.FACULTY, name: 'Dr. Rajesh Kumar', email: 'rajesh.kumar@academic.edu', org: 'Org 1 Academic Authority', description: 'Coursework & CIE Marks' },
+      { role: ROLES.HOD, name: 'Prof. K. V. Rao', email: 'hod.cse@academic.edu', org: 'Org 1 Academic Authority', description: 'Department Leadership & DAC Voting' },
+      { role: ROLES.EXAM_CONTROLLER, name: 'Prof. S. R. Murthy', email: 'controller@academic.edu', org: 'Org 2 Evaluation Authority', description: 'Grade Lockdown & Merkle Anchoring' },
+      { role: ROLES.ADMIN, name: 'Central Administration Authority', email: 'admin@academic.edu', org: 'Org 3 Central Administration', description: 'Full Privileges & Cloudflare R2 Backup' }
+    ]
+  });
+});
+
+// ============================================================================
+// Group 7: Cloudflare R2 Enterprise Backup Storage (Restricted to ADMIN)
+// ============================================================================
+app.get('/api/r2/status', requireRole(ROLES.ADMIN), async (req, res) => {
+  try {
+    const health = await r2.checkR2Health();
+    res.json({
+      ...health,
+      bucket: r2.BUCKET,
+      authorizedRole: req.user.role,
+      user: req.user.name
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/r2/link/:certId', requireRole(ROLES.ADMIN), async (req, res) => {
+  try {
+    const certId = req.params.certId.toUpperCase();
+    const key = `certificates/${certId}.pdf`;
+    const downloadLink = await r2.getDownloadLink(key, 900);
+    res.json({
+      certId,
+      key,
+      bucket: r2.BUCKET,
+      downloadLink,
+      expiresInSeconds: 900,
+      authorizedRole: req.user.role
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/r2/download/:certId', requireRole(ROLES.ADMIN), async (req, res) => {
+  try {
+    const certId = req.params.certId.toUpperCase();
+    const key = `certificates/${certId}.pdf`;
+    const buffer = await r2.fetchFromR2(key);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${certId}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(404).json({ error: `Certificate ${req.params.certId} not found in Cloudflare R2: ${err.message}` });
+  }
 });
 
 if (require.main === module) {

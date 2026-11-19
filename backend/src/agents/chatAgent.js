@@ -4,6 +4,8 @@ const { queryChaincode, checkNetworkHealth } = require('../fabric');
 const { checkIPFSHealth } = require('../ipfs');
 const fraudAgent = require('./fraudAgent');
 const hfClient = require('./hfAgentClient');
+const r2 = require('../r2');
+const { ROLES } = require('../auth');
 
 class ChatbotAgent {
   constructor() {
@@ -12,11 +14,59 @@ class ChatbotAgent {
   }
 
   /**
-   * Process a conversational natural language prompt and return rich blockchain insights
+   * Process a conversational natural language prompt with Role-Based Access Control
    */
-  async processMessage(message) {
+  async processMessage(message, context = {}) {
     const text = message.trim();
     const lower = text.toLowerCase();
+    const role = (context.role || 'STUDENT').toUpperCase();
+    const userName = context.name || context.user || role;
+
+    // 0. Cloudflare R2 Storage & Presigned Link Queries (Admin Exclusive)
+    if (lower.includes('cloudflare') || lower.includes('r2') || (lower.includes('backup') && (lower.includes('storage') || lower.includes('link') || lower.includes('download')))) {
+      if (role !== ROLES.ADMIN) {
+        return {
+          reply: `### 🔒 Access Denied: Cloudflare R2 Enterprise Backup Storage\n\n` +
+                 `• **Current Role**: \`${role}\` (${context.org || 'Standard Access'})\n` +
+                 `• **Required Role**: \`ADMIN\` (Org 3 Central Administration)\n\n` +
+                 `⚠️ Access to Cloudflare R2 enterprise backup storage, bucket introspection, and temporary presigned download links is strictly restricted to authorized Central Administrators.\n\n` +
+                 `*To access Cloudflare R2 features, switch your role to **Administrator (Org 3)** in the Chatbot Organization selector.*`,
+          intent: 'RBAC_FORBIDDEN',
+          role
+        };
+      }
+
+      // Admin has authorized access to Cloudflare R2!
+      const certMatch = text.match(/CERT-[A-Za-z0-9-]+/i);
+      if (certMatch) {
+        const certId = certMatch[0].toUpperCase();
+        const downloadLink = await r2.getDownloadLink(`certificates/${certId}.pdf`, 900);
+        return {
+          reply: `### ☁️ Cloudflare R2 Backup Dossier (Authorized: ${userName})\n\n` +
+                 `• **Certificate ID**: \`${certId}\`\n` +
+                 `• **Bucket**: \`${r2.BUCKET}\`\n` +
+                 `• **Primary Storage URI**: \`r2://${r2.BUCKET}/certificates/${certId}.pdf\`\n` +
+                 `• **Presigned Download URL** (Valid for 15 minutes):\n` +
+                 `  [🔗 Direct Download from Cloudflare R2](${downloadLink})\n\n` +
+                 `*Dual-Storage Archival Policy: Active (Primary IPFS Kubo + Cloudflare R2 Enterprise Backup).*`,
+          intent: 'R2_BACKUP_LINK',
+          data: { certId, downloadLink, role }
+        };
+      }
+
+      const r2Health = await r2.checkR2Health();
+      return {
+        reply: `### ☁️ Cloudflare R2 Enterprise Backup Status (Authorized: ${userName})\n\n` +
+               `• **Status**: ${r2Health.healthy ? '🟢 ONLINE & OPERATIONAL' : '🟡 CONFIGURED (SIMULATED)'}\n` +
+               `• **Bucket**: \`${r2.BUCKET}\`\n` +
+               `• **S3 Endpoint**: \`${r2Health.endpoint || process.env.R2_S3_ENDPOINT}\`\n` +
+               `• **Access Tier**: Org 3 Central Administrator Exclusive\n` +
+               `• **Policy**: Synchronous dual-pinning along with IPFS Kubo for disaster recovery\n\n` +
+               `*Tip: You can ask for a presigned download link by mentioning any Certificate ID (e.g. "Get R2 link for CERT-2024-001").*`,
+        intent: 'R2_STATUS',
+        data: r2Health
+      };
+    }
 
     // 1. Network Health & Topology Query
     if (lower.includes('health') || (lower.includes('status') && (lower.includes('network') || lower.includes('system') || lower.includes('peer')))) {
