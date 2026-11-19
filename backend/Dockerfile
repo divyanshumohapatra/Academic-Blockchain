@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Install Docker CLI so backend container can invoke Fabric CLI container commands
 RUN apk add --no-cache docker-cli bash

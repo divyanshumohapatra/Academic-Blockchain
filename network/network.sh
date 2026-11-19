@@ -48,6 +48,10 @@ function networkUp() {
   echo "--> Deploying academic-contract chaincode across 3 orgs..."
   MSYS_NO_PATHCONV=1 docker exec cli bash -c "/opt/gopath/src/github.com/hyperledger/fabric/peer/scripts/deploy-chaincode.sh"
 
+  # 5. Export MSP keys for the Keys Center (keys/ and backend/storage/keys/ are gitignored)
+  echo "--> Exporting MSP keys for the Keys & MSP Center..."
+  node "${ROOT_DIR}/scripts/export_and_generate_keys.js" || echo "⚠️ Key export skipped (Node.js not found). Run: node scripts/export_and_generate_keys.js"
+
   echo "========================================================="
   echo " 🚀 3-Organization Academic Blockchain Network is LIVE! "
   echo "========================================================="
