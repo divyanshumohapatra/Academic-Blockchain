@@ -82,6 +82,7 @@
     <!-- Tabs Navigation -->
     <nav class="tabs">
       <button class="tab-btn active" data-tab="workflow-tab">📋 Lifecycle & Workflow</button>
+      <button class="tab-btn" data-tab="passport-tab" style="color: #2563eb; font-weight: 700;">🛡️ ZK-Passport & Privacy</button>
       <button class="tab-btn" data-tab="agents-tab">🤖 Autonomous Agentic Engine</button>
       <button class="tab-btn" data-tab="register-tab">👤 Student Registration</button>
       <button class="tab-btn" data-tab="keys-tab">🔐 Cryptographic Keys & MSP</button>
@@ -232,6 +233,151 @@
             <div class="result-placeholder">Issued certificate details and cryptographic proof will appear here.</div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Tab: ZK-Passport & Privacy Proofs (Group 1 Feature) -->
+    <section id="passport-tab" class="tab-content">
+      <div class="card full-width-card" style="margin-bottom: 1.5rem; border-left: 4px solid #2563eb;">
+        <div class="card-title">
+          <div>
+            <h3>🛡️ Group 1: Cryptographic Academic Passport & Zero-Knowledge Privacy Suite</h3>
+            <p class="subtitle" style="margin-bottom: 0;">
+              Hyperledger Fabric 2.5 Decentralized Identity (DID), Dynamic QR Code & ZK-Threshold Merkle Proofs
+            </p>
+          </div>
+          <span class="badge" style="background:#dbeafe; color:#1e40af; font-weight:700; padding:4px 10px; border-radius:6px;">GROUP 1 EXCLUSIVE</span>
+        </div>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.6;">
+          This privacy-preserving suite empowers students with a self-sovereign digital academic passport and dynamic QR code. It enables candidates to prove to recruiters that their CGPA meets job criteria using <strong>Zero-Knowledge Range Proofs</strong> without disclosing confidential grades or academic records.
+        </p>
+      </div>
+
+      <!-- 3-Column Feature Cards: 1.1, 1.2, 1.3 -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem;">
+        
+        <!-- Contributor 1.1: Cryptographic Passport & Dynamic QR Code -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div class="card-title">
+              <div>
+                <h4>🎓 Contributor 1.1: Academic Passport & QR</h4>
+                <span style="font-size: 0.75rem; color: #2563eb; font-weight: 600;">Decentralized Student Identity (DID)</span>
+              </div>
+              <span class="key-badge key-badge-student">Contrib 1.1</span>
+            </div>
+            <p style="font-size: 0.8rem; color: #64748b;">
+              Issues an on-chain verifiable passport with student DID, Latin Honors standing, public key fingerprint, and real-time QR code.
+            </p>
+            <div class="form-group" style="margin-top: 1rem;">
+              <label for="passportStuId">Student Roll Number / ID:</label>
+              <div class="input-with-action">
+                <input type="text" id="passportStuId" value="STU-2024-001" placeholder="e.g. STU-2024-001">
+                <button type="button" class="btn-primary btn-sm" id="generatePassportBtn">Generate Passport & QR</button>
+              </div>
+            </div>
+
+            <!-- Passport Display Card -->
+            <div id="passportCardOutput" style="display: none; margin-top: 1rem; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; border-radius: 10px; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 0.75rem;">
+                <div>
+                  <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Republic of Academia • Consortium Credential</div>
+                  <div id="ppStudentName" style="font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin-top: 0.2rem;">Alice Johnson</div>
+                  <div id="ppStudentDid" style="font-size: 0.72rem; color: #cbd5e1; font-family: monospace;">did:fabric:org1:STU-2024-001</div>
+                </div>
+                <div id="ppHonorsBadge" style="background: #f59e0b; color: #000; font-weight: 800; font-size: 0.7rem; padding: 3px 8px; border-radius: 4px;">Summa Cum Laude</div>
+              </div>
+
+              <div style="display: flex; gap: 1rem; margin-top: 1rem; align-items: center;">
+                <div id="ppQrWrapper" style="background: #ffffff; padding: 6px; border-radius: 6px; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center;">
+                  <img id="ppQrImg" src="" alt="Passport QR" style="max-width: 100%; height: auto; display: none;">
+                  <span id="ppQrPlaceholder" style="font-size: 0.7rem; color: #64748b; text-align: center;">QR Loading...</span>
+                </div>
+                <div style="font-size: 0.75rem; color: #cbd5e1; display: flex; flex-direction: column; gap: 0.3rem;">
+                  <div><strong>Degree:</strong> <span id="ppDegree">MCA</span></div>
+                  <div><strong>Department:</strong> <span id="ppDept">CSE</span></div>
+                  <div><strong>Issuer:</strong> <span style="color:#38bdf8;">Org1MSP (Academic Affairs)</span></div>
+                  <div><strong>Fingerprint:</strong> <span id="ppFingerprint" style="font-family: monospace; color:#34d399;">f48c2b9a710e...</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contributor 1.2: Zero-Knowledge Range Proof Generator -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div class="card-title">
+              <div>
+                <h4>🛡️ Contributor 1.2: ZK-Range Proof Engine</h4>
+                <span style="font-size: 0.75rem; color: #059669; font-weight: 600;">CouchDB State Indexing</span>
+              </div>
+              <span class="key-badge key-badge-org1">Contrib 1.2</span>
+            </div>
+            <p style="font-size: 0.8rem; color: #64748b;">
+              Generates a cryptographic SHA-256 Merkle proof that a student meets a CGPA threshold <em>without revealing actual grades</em>.
+            </p>
+            <div class="form-group" style="margin-top: 1rem;">
+              <label for="zkThresholdSelect">Claimed Academic Threshold:</label>
+              <select id="zkThresholdSelect" style="font-weight: 600;">
+                <option value="8.5">CGPA ≥ 8.5 (Dean's Honor Roll Threshold)</option>
+                <option value="9.0">CGPA ≥ 9.0 (Summa Cum Laude Threshold)</option>
+                <option value="8.0">CGPA ≥ 8.0 (Graduate Distinction Threshold)</option>
+                <option value="7.5">CGPA ≥ 7.5 (Standard Placement Threshold)</option>
+              </select>
+            </div>
+            <button type="button" class="btn-success full-width" id="generateZkProofBtn">⚡ Generate Zero-Knowledge Merkle Proof</button>
+
+            <!-- ZK Proof Result Box -->
+            <div id="zkProofResultBox" style="display: none; margin-top: 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-weight: 700; color: #166534; font-size: 0.85rem;">✅ ZK-Proof Committed to Fabric</span>
+                <span id="zkProofTokenPill" style="font-family: monospace; font-size: 0.7rem; background: #dcfce7; color: #15803d; padding: 2px 6px; border-radius: 4px;">ZKP-TOKEN</span>
+              </div>
+              <div style="font-size: 0.78rem; color: #1e3a8a; font-family: monospace; word-break: break-all; margin-bottom: 0.5rem;" id="zkProofHashText">
+                Hash: 0x...
+              </div>
+              <p style="font-size: 0.75rem; color: #374151; margin-bottom: 0;">
+                Proof verifies threshold satisfaction. Zero confidential transcript data is revealed to verifiers.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contributor 1.3: Autonomous ZK-Verifier Agent -->
+        <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div class="card-title">
+              <div>
+                <h4>🤖 Contributor 1.3: Autonomous ZK-Verifier</h4>
+                <span style="font-size: 0.75rem; color: #7c3aed; font-weight: 600;">Recruiter Audit & Sentinel Handshake</span>
+              </div>
+              <span class="key-badge key-badge-org2">Contrib 1.3</span>
+            </div>
+            <p style="font-size: 0.8rem; color: #64748b;">
+              Autonomous AI agent for recruiters that queries Fabric and verifies cryptographic proofs against Group 3 fraud detection.
+            </p>
+            <div class="form-group" style="margin-top: 1rem;">
+              <label for="zkVerifyTokenInput">Proof Token / Hash:</label>
+              <input type="text" id="zkVerifyTokenInput" placeholder="Auto-fills from proof above or enter hash">
+            </div>
+            <button type="button" class="btn-primary full-width" id="runZkVerifierBtn" style="background: linear-gradient(135deg, #7c3aed, #4f46e5);">
+              🚀 Run Autonomous Verifier Agent
+            </button>
+
+            <!-- Agent Verification Output -->
+            <div id="zkAgentOutputBox" style="display: none; margin-top: 1rem; background: #0f172a; color: #f8fafc; border-radius: 8px; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;">
+              <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 0.4rem; margin-bottom: 0.5rem;">
+                <span style="color: #38bdf8;">[Agent-ZK-Recruiter-Audit]</span>
+                <span id="zkAgentBadge" style="background: #10b981; color: #ffffff; padding: 1px 6px; border-radius: 3px; font-weight: bold;">APPROVED</span>
+              </div>
+              <div id="zkAgentSteps" style="display: flex; flex-direction: column; gap: 0.4rem; color: #cbd5e1; font-size: 0.72rem;">
+                <!-- Dynamically populated steps -->
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
 
