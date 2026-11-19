@@ -9,19 +9,17 @@ const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
-const { invokeChaincode, queryChaincode, checkNetworkHealth, invokeOrg1Transaction, queryOrg1Ledger } = require('./fabric');
+const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
 const { generateStudentDID, isValidStudentDID, signPayload, getActorSigningSecret } = require('./cryptoUtil');
 const facultyAuth = require('./facultyAuth');
 const orchestrator = require('./agents/orchestrator');
 const fraudAgent = require('./agents/fraudAgent');
 const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
-const { Org1AcademicAgent } = require('./agents/orgAgents');
 const { CertMintingMultiAgentEngine } = require('./agents/certMintingAgents');
 const sisDatabase = require('./db/sisDatabase');
 
 const certMintingEngine = new CertMintingMultiAgentEngine();
-const org1AcademicAgent = new Org1AcademicAgent();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -1792,58 +1790,30 @@ app.get('/api/agents/audit/:requestId', async (req, res) => {
   }
 });
 
-// ==========================================
-// 6.1 Org 1 Autonomous Academic Department Agent Routes
-// Contributor 1.3: Org 1 Academic Agent Lead
-// ==========================================
-
-// POST /api/agents/org1/audit/:requestId
-// Evaluates attendance (>=75%), CIE marks (>=20/50), prerequisites, credits, and DAC capstone rubric
-app.post('/api/agents/org1/audit/:requestId', async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const auditReport = await org1AcademicAgent.auditRequest(requestId, req.body || {});
-    res.json(auditReport);
-  } catch (err) {
-    console.error(`[Org1 Agent] Error auditing request ${req.params.requestId}:`, err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/agents/org1/audit/:requestId (Convenience alias)
-app.get('/api/agents/org1/audit/:requestId', async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const auditReport = await org1AcademicAgent.auditRequest(requestId, {});
-    res.json(auditReport);
-  } catch (err) {
-    console.error(`[Org1 Agent] Error auditing request ${req.params.requestId}:`, err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/agents/org1/auto-approve/:requestId
-// Runs the autonomous audit and, if passed, sequentially submits on-chain approvals for Faculty, HOD, and DAC via Org1MSP
-app.post('/api/agents/org1/auto-approve/:requestId', async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const result = await org1AcademicAgent.autoApprove(requestId, req.body || {});
-    if (!result.success) {
-      return res.status(422).json(result);
-    }
-    res.json(result);
-  } catch (err) {
-    console.error(`[Org1 Agent] Error in auto-approval for ${req.params.requestId}:`, err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// Intelligent Fraud & Anomaly Scoring Scanner
 app.post('/api/agents/fraud-scan', async (req, res) => {
   try {
-    const result = await fraudAgent.evaluateRisk(req.body);
+    const options = req.body.options || {};
+    const result = await fraudAgent.evaluateRisk(req.body, null, options);
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agents/sentinel/simulate', async (req, res) => {
+  try {
+    const { scenario = 'CLEAN', requestId = 'REQ-2024-001' } = req.body;
+    const result = await fraudAgent.simulateScenario(scenario, requestId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/agents/sentinel/telemetry', (req, res) => {
+  try {
+    const stats = fraudAgent.getTelemetry();
+    res.json(stats);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1883,7 +1853,6 @@ app.get('/api/agents/health', (req, res) => {
   res.json({
     status: 'HEALTHY',
     agents: [
-      { name: 'Org1AcademicAgent', role: 'Autonomous Academic Department Lead & Stages 1-3 Coordinator', status: 'ONLINE', org: 'Org 1' },
       { name: 'FacultyAgent', role: 'Coursework & Attendance Verification', status: 'ONLINE', org: 'Org 1' },
       { name: 'FacultyAdvisorAgent', role: 'Cross-Course 5-Subject Prerequisite Gate', status: 'ONLINE', org: 'Org 1' },
       { name: 'HODAgent', role: 'Department Curriculum & Credit Audit', status: 'ONLINE', org: 'Org 1' },

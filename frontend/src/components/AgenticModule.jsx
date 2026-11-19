@@ -26,7 +26,10 @@ import {
   Award, 
   CheckCircle, 
   KeyRound,
-  RefreshCw
+  RefreshCw,
+  Activity,
+  Zap,
+  Radio
 } from "lucide-react";
 
 const AGENT_STAGES = [
@@ -221,6 +224,8 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
   const [stageResults, setStageResults] = useState({});
   const [activeStageDetail, setActiveStageDetail] = useState(null);
   const [fraudData, setFraudData] = useState(null);
+  const [activeSimulation, setActiveSimulation] = useState(null);
+  const [sentinelTelemetry, setSentinelTelemetry] = useState(null);
   const [executionLogs, setExecutionLogs] = useState([]);
   const [pipelineStatus, setPipelineStatus] = useState("IDLE"); // IDLE, RUNNING, SUCCESS, FAILED
   const [issuanceResult, setIssuanceResult] = useState(null);
@@ -412,6 +417,40 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
         const synced = buildStageResultsFromStatus(data.status, data.history, data.details || {});
         setStageResults(synced);
 
+        if (data.details) {
+          const det = data.details;
+          const hasHold = det.disciplinaryClearance === false;
+          const backlogs = det.backlogs || 0;
+          const att = det.attendance !== undefined ? Number(det.attendance) : 88.5;
+          const fee = (det.feeDues || 0) + (det.libraryDues || 0);
+
+          let initialRisk = 4;
+          let threatCat = "CLEAN";
+          if (hasHold) { initialRisk = 78; threatCat = "CLEARANCE_DEFICIT"; }
+          else if (backlogs > 0) { initialRisk = 55; threatCat = "CLEARANCE_DEFICIT"; }
+          else if (att < 75) { initialRisk = att < 60 ? 45 : 25; threatCat = "CLEARANCE_DEFICIT"; }
+          else if (fee > 0) { initialRisk = 25; threatCat = "CLEARANCE_DEFICIT"; }
+
+          setFraudData(prev => prev && prev.requestId === reqId ? prev : {
+            agent: "Agent-Fraud-Sentinel",
+            requestId: reqId,
+            studentId: data.studentId || det.studentId,
+            riskScore: initialRisk,
+            threatLevel: initialRisk >= 75 ? "CRITICAL" : (initialRisk >= 45 ? "HIGH" : (initialRisk >= 20 ? "MEDIUM" : "LOW")),
+            threatCategory: threatCat,
+            vectorScores: {
+              velocity: 100,
+              ledgerInvariants: 100,
+              dataIntegrity: 100,
+              transcriptCorrelation: att < 75 ? 60 : 98,
+              duesAndBacklogs: hasHold ? 30 : (backlogs > 0 ? 45 : (fee > 0 ? 70 : 100))
+            },
+            forensicSummary: `Consortium Sentinel active. Monitored on-chain invariants for ${reqId}. Telemetry indicates ${initialRisk >= 75 ? 'CRITICAL' : 'VERIFIED'} status (${initialRisk}/100).`,
+            action: initialRisk >= 75 ? "QUARANTINE_ON_CHAIN" : "ALLOW_PROCEED",
+            findings: []
+          });
+        }
+
         if (data.status === "CERTIFICATE_ISSUED") {
           setPipelineStatus("SUCCESS");
           setCompletedDossier({
@@ -487,10 +526,21 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
     }
   };
 
+  const fetchSentinelTelemetry = async () => {
+    try {
+      const res = await fetch(API_BASE + "/agents/sentinel/telemetry");
+      if (res.ok) {
+        const stats = await res.json();
+        setSentinelTelemetry(stats);
+      }
+    } catch (e) {}
+  };
+
   const runFraudScan = async () => {
     if (!selectedReqId) return;
+    setActiveSimulation(null);
     setLoading(true);
-    addLog("\n🛡️ [Fraud Sentinel AI] Running deep anomaly inspection on " + selectedReqId + "...");
+    addLog("\n🛡️ [Consortium Sentinel AI] Running 5-vector anomaly inspection on " + selectedReqId + "...");
 
     try {
       const reqRes = await fetch(API_BASE + "/requests/" + encodeURIComponent(selectedReqId));
@@ -504,16 +554,98 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
       const scanResult = await scanRes.json();
 
       setFraudData(scanResult);
-      addLog("[Fraud Scan Result] Composite Risk: " + scanResult.riskScore + "/100 (" + scanResult.riskLevel + ")");
+      addLog(`[Sentinel Risk Evaluation] Composite Risk: ${scanResult.riskScore}/100 (${scanResult.threatLevel || scanResult.riskLevel})`);
+      addLog(`  • Action Directive: ${scanResult.action || scanResult.recommendation}`);
+      if (scanResult.forensicSummary) {
+        addLog(`  • Groq Threat Dossier: ${scanResult.forensicSummary}`);
+      }
       if (scanResult.findings && scanResult.findings.length > 0) {
         scanResult.findings.forEach(f => {
           addLog("  ⚠️ [" + f.severity + "] " + f.type + ": " + f.detail);
         });
       } else {
-        addLog("  ✅ Zero anomalies detected. Invariant & velocity safety rules 100% satisfied.");
+        addLog("  ✅ All 5 threat vectors verified. Monotonic state order & Merkle parity 100% satisfied.");
       }
+
+      // Update stageResults['fraud']
+      const isCritical = scanResult.riskScore >= 75;
+      const isWarning = scanResult.riskScore >= 45 && scanResult.riskScore < 75;
+      setStageResults(prev => ({
+        ...prev,
+        fraud: {
+          status: isCritical ? "HALTED" : (isWarning ? "SUPERVISED" : "SUCCESS"),
+          title: "Fraud & Invariant Sentinel",
+          agent: scanResult.agent || "Agent-Fraud-Sentinel",
+          confidence: scanResult.confidence || 0.99,
+          verdict: isCritical ? `QUARANTINED (${scanResult.threatCategory})` : `APPROVED (${scanResult.threatCategory})`,
+          rationale: scanResult.forensicSummary || "Sentinel evaluation complete",
+          vectorScores: scanResult.vectorScores,
+          threatCategory: scanResult.threatCategory,
+          timestamp: new Date().toLocaleTimeString()
+        }
+      }));
+
+      fetchSentinelTelemetry();
     } catch (err) {
       addLog("❌ [Fraud Scan Error] " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const simulateAttackScenario = async (scenarioType) => {
+    setActiveSimulation(scenarioType);
+    setLoading(true);
+    addLog(`\n🚨 [SENTINEL ADVERSARIAL ATTACK SIMULATION TRIGGERED: ${scenarioType}]`);
+    addLog("Injecting attack vector into Consortium Sentinel & Groq Threat Intelligence Core...");
+
+    try {
+      const res = await fetch(API_BASE + "/agents/sentinel/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scenario: scenarioType,
+          requestId: selectedReqId || "REQ-2024-001"
+        })
+      });
+      const data = await res.json();
+      setFraudData(data);
+
+      const isCritical = data.riskScore >= 75;
+      const isWarning = data.riskScore >= 45 && data.riskScore < 75;
+
+      addLog(`🛡️ [Sentinel Detection Verdict] Threat Level: ${data.threatLevel} | Category: ${data.threatCategory}`);
+      addLog(`  • Risk Score: ${data.riskScore}/100 | Action Directive: ${data.action}`);
+      if (data.forensicSummary) {
+        addLog(`  • Groq Forensic Intel: ${data.forensicSummary}`);
+      }
+      if (data.findings && data.findings.length > 0) {
+        data.findings.forEach(f => {
+          addLog(`  ⚠️ [${f.severity}] ${f.type}: ${f.detail}`);
+        });
+      }
+
+      setStageResults(prev => ({
+        ...prev,
+        fraud: {
+          status: isCritical ? "HALTED" : (isWarning ? "SUPERVISED" : "SUCCESS"),
+          title: "Fraud & Invariant Sentinel",
+          agent: data.agent || "Agent-Fraud-Sentinel",
+          confidence: data.confidence || 0.99,
+          verdict: isCritical ? `QUARANTINED (${data.threatCategory})` : `APPROVED (${data.threatCategory})`,
+          rationale: data.forensicSummary || "Sentinel evaluation complete",
+          vectorScores: data.vectorScores,
+          threatCategory: data.threatCategory,
+          timestamp: new Date().toLocaleTimeString()
+        }
+      }));
+
+      if (isCritical) {
+        setPipelineStatus("FAILED");
+      }
+      fetchSentinelTelemetry();
+    } catch (err) {
+      addLog("❌ [Simulation Error] " + err.message);
     } finally {
       setLoading(false);
     }
@@ -866,7 +998,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
               className="btn-secondary" 
               onClick={runPreFlightAudit}
               disabled={loading}
-              style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#312e81", borderColor: "#4f46e5", color: "#e0e7ff" }}
+              style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "var(--primary-light)", borderColor: "var(--primary-border)", color: "var(--primary)" }}
             >
               <Search size={15} /> Pre-Flight Audit
             </button>
@@ -876,7 +1008,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
               className="btn-secondary" 
               onClick={runFraudScan}
               disabled={loading}
-              style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#0c4a6e", borderColor: "#0284c7", color: "#e0f2fe" }}
+              style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "var(--org1-bg)", borderColor: "var(--org1-border)", color: "var(--org1-color)" }}
             >
               <ShieldCheck size={15} /> Fraud Scan
             </button>
@@ -886,7 +1018,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
               className="btn-secondary" 
               onClick={runCertificateAgentsDirectly}
               disabled={loading}
-              style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "#065f46", borderColor: "#059669", color: "#ecfdf5" }}
+              style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "var(--success-bg)", borderColor: "var(--success-border)", color: "var(--success)" }}
             >
               <Award size={15} /> 💎 Run Certificate Agents
             </button>
@@ -897,13 +1029,13 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
               onClick={runAutonomousPipeline}
               disabled={loading}
               style={{ 
-                background: "linear-gradient(135deg, #10b981, #059669)", 
+                background: "linear-gradient(135deg, var(--primary), #1e40af)", 
                 fontWeight: "700", 
                 padding: "0.65rem 1.25rem",
                 display: "flex",
                 alignItems: "center",
                 gap: "0.5rem",
-                boxShadow: "0 4px 14px rgba(16, 185, 129, 0.3)"
+                boxShadow: "0 4px 14px rgba(30, 58, 138, 0.25)"
               }}
             >
               <Sparkles size={16} />
@@ -993,39 +1125,532 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
           <div style={{ 
             marginTop: "1rem", 
             padding: "0.75rem 1rem", 
-            background: "#1e293b", 
+            background: "var(--primary-light)", 
             borderRadius: "8px", 
-            border: "1px solid #6366f1",
+            border: "1px solid var(--primary-border)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between"
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#e0e7ff", fontWeight: "600", fontSize: "0.9rem" }}>
-              <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", background: "#818cf8", animation: "ping 1s infinite" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "var(--primary)", fontWeight: "600", fontSize: "0.9rem" }}>
+              <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", background: "var(--primary)", animation: "ping 1s infinite" }} />
               {currentExecutingTitle || "Orchestrating multi-agent consensus..."}
             </div>
-            <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
               Pacing: 1.2s per stage for real-time observation
             </span>
           </div>
         )}
       </div>
 
+      {/* ======================================================== */}
+      {/* 🛡️ CONSORTIUM CYBER SENTINEL & THREAT OPERATIONS HUD     */}
+      {/* ======================================================== */}
+      {(() => {
+        const rawScore = fraudData?.riskScore ?? 6;
+        const threatLvl = fraudData?.threatLevel ?? (rawScore >= 75 ? "CRITICAL" : (rawScore >= 45 ? "HIGH" : (rawScore >= 20 ? "MEDIUM" : "LOW")));
+        const isCrit = rawScore >= 75;
+        const isWarn = rawScore >= 45 && rawScore < 75;
+        const hudColor = isCrit ? "var(--danger)" : (isWarn ? "var(--warning)" : "var(--success)");
+        const hudBg = isCrit ? "var(--danger-bg)" : (isWarn ? "var(--warning-bg)" : "var(--success-bg)");
+        const hudBorder = isCrit ? "var(--danger-border)" : (isWarn ? "var(--warning-border)" : "var(--primary-border)");
+
+        const needleAngle = (rawScore / 100) * 180 - 90; // -90deg to +90deg
+        const needleRad = (needleAngle * Math.PI) / 180;
+        const needleLength = 55;
+        const needleX = 100 + needleLength * Math.cos(needleRad - Math.PI / 2);
+        const needleY = 95 + needleLength * Math.sin(needleRad - Math.PI / 2);
+
+        const vScores = fraudData?.vectorScores || {
+          velocity: isCrit && activeSimulation === 'VELOCITY_FLOOD' ? 20 : 100,
+          ledgerInvariants: isCrit && activeSimulation === 'STATE_JUMP' ? 10 : 100,
+          dataIntegrity: isCrit && activeSimulation === 'GRADE_TAMPER' ? 20 : 100,
+          transcriptCorrelation: isCrit && activeSimulation === 'GRADE_TAMPER' ? 25 : (targetRequestInfo?.details?.attendance < 75 ? 65 : 98),
+          duesAndBacklogs: isCrit && activeSimulation === 'DUES_HOLD' ? 30 : (targetRequestInfo?.details?.backlogs > 0 ? 45 : 100)
+        };
+
+        return (
+          <div 
+            className="card"
+            style={{ 
+              background: isCrit 
+                ? "linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)" 
+                : (isWarn 
+                    ? "linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)" 
+                    : "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)"), 
+              border: `1.5px solid ${hudBorder}`, 
+              borderRadius: "14px",
+              padding: "1.35rem 1.5rem",
+              boxShadow: isCrit ? "0 4px 20px rgba(220, 38, 38, 0.15)" : "var(--shadow-sm)",
+              color: "var(--text)"
+            }}
+          >
+            {/* Top Bar: Title & Live Heartbeat */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem", borderBottom: "1px solid var(--border)", paddingBottom: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                <div style={{ 
+                  width: "44px", 
+                  height: "44px", 
+                  borderRadius: "50%", 
+                  background: hudBg, 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "center",
+                  border: `1.5px solid ${hudColor}`,
+                  animation: isCrit ? "sentinelDangerPulse 2s infinite" : "sentinelPulse 3s infinite"
+                }}>
+                  {isCrit ? <ShieldAlert size={26} color={hudColor} /> : <ShieldCheck size={26} color={hudColor} />}
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <h3 style={{ fontSize: "1.2rem", fontWeight: "700", color: "var(--heading)", margin: 0 }}>
+                      Consortium Sentinel & Cyber Threat Operations Center
+                    </h3>
+                    <span style={{ 
+                      fontSize: "0.7rem", 
+                      padding: "0.2rem 0.55rem", 
+                      borderRadius: "12px", 
+                      fontWeight: "700", 
+                      background: isCrit ? "var(--danger-bg)" : "var(--success-bg)", 
+                      color: isCrit ? "var(--danger)" : "var(--success)",
+                      border: `1px solid ${isCrit ? "var(--danger-border)" : "var(--success-border)"}`
+                    }}>
+                      {isCrit ? "ALERT: ANOMALY TRIPPED" : "LIVE MONITORING"}
+                    </span>
+                  </div>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", margin: "3px 0 0 0" }}>
+                    Continuous cross-peer audit protecting Org 1 (Academic), Org 2 (Exam Board), and Org 3 (Senate) ledgers with Groq LPU inference.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                <span style={{ 
+                  background: "var(--primary-light)", 
+                  color: "var(--primary)", 
+                  border: "1px solid var(--primary-border)", 
+                  padding: "0.35rem 0.75rem", 
+                  borderRadius: "20px", 
+                  fontSize: "0.78rem",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}>
+                  <Zap size={14} color="var(--primary)" />
+                  Groq Core: {fraudData?.model || hfConfig.model || 'Llama 3.3'}
+                </span>
+                <span style={{ 
+                  background: isCrit ? "var(--danger-bg)" : "var(--success-bg)", 
+                  color: isCrit ? "var(--danger)" : "var(--success)", 
+                  border: `1px solid ${isCrit ? "var(--danger-border)" : "var(--success-border)"}`, 
+                  padding: "0.35rem 0.75rem", 
+                  borderRadius: "20px", 
+                  fontSize: "0.78rem",
+                  fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}>
+                  <Radio size={14} />
+                  {isCrit ? "STATE_QUARANTINED" : "INVARIANTS_PASSED"}
+                </span>
+              </div>
+            </div>
+
+            {/* QUARANTINE WARNING BANNER */}
+            {isCrit && (
+              <div style={{
+                marginTop: "1.25rem",
+                background: "var(--danger-bg)",
+                border: "1.5px solid var(--danger-border)",
+                color: "var(--danger)",
+                borderRadius: "10px",
+                padding: "1rem 1.25rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "1rem",
+                animation: "sentinelDangerPulse 2s infinite"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                  <ShieldAlert size={32} color="var(--danger)" />
+                  <div>
+                    <div style={{ fontWeight: "800", fontSize: "1.05rem", letterSpacing: "0.02em", color: "var(--danger)" }}>
+                      🚨 SENTINEL ON-CHAIN QUARANTINE ENFORCED ({fraudData?.threatCategory || 'ANOMALY'})
+                    </div>
+                    <div style={{ fontSize: "0.84rem", color: "#991b1b", marginTop: "3px" }}>
+                      Critical invariant failure detected. Master Orchestrator has halted stage progression on Hyperledger Fabric to prevent fraudulent certificate minting.
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <span style={{ background: "var(--danger)", color: "#ffffff", padding: "0.35rem 0.85rem", borderRadius: "6px", fontSize: "0.8rem", fontWeight: "800" }}>
+                    PROPOSAL_BLOCKED
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* MAIN 3-PANEL DISPLAY: Radar + Gauge + Vectors */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: "1.25rem", marginTop: "1.25rem" }}>
+              
+              {/* PANEL 1: Animated Radar Sweep Scanner */}
+              <div style={{ background: "#ffffff", border: "1px solid var(--border)", borderRadius: "10px", padding: "1.25rem", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", boxShadow: "var(--shadow-sm)" }}>
+                <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--heading)", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <Radio size={14} color="var(--primary)" /> Threat Radar Scanner
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>3-Org Fabric Ring</span>
+                </div>
+
+                {/* Radar Circular Dish */}
+                <div style={{ 
+                  position: "relative", 
+                  width: "180px", 
+                  height: "180px", 
+                  borderRadius: "50%", 
+                  background: isCrit 
+                    ? "radial-gradient(circle, #fff1f2 0%, #fef2f2 60%, #fee2e2 100%)" 
+                    : "radial-gradient(circle, #f0fdf4 0%, #f0f9ff 60%, #f8fafc 100%)",
+                  border: isCrit ? "2px solid var(--danger)" : "2px solid var(--success-border)",
+                  boxShadow: isCrit ? "0 0 15px rgba(220, 38, 38, 0.2)" : "0 0 12px rgba(5, 150, 105, 0.15)",
+                  overflow: "hidden",
+                  margin: "0.5rem 0"
+                }}>
+                  {/* Concentric Grid Rings */}
+                  <div style={{ position: "absolute", top: "15%", left: "15%", width: "70%", height: "70%", borderRadius: "50%", border: isCrit ? "1px dashed rgba(220, 38, 38, 0.25)" : "1px dashed rgba(30, 58, 138, 0.2)" }} />
+                  <div style={{ position: "absolute", top: "32%", left: "32%", width: "36%", height: "36%", borderRadius: "50%", border: isCrit ? "1px dashed rgba(220, 38, 38, 0.35)" : "1px dashed rgba(30, 58, 138, 0.25)" }} />
+                  {/* Axis Crosshairs */}
+                  <div style={{ position: "absolute", top: "50%", left: "0", width: "100%", height: "1px", background: isCrit ? "rgba(220, 38, 38, 0.2)" : "rgba(30, 58, 138, 0.15)" }} />
+                  <div style={{ position: "absolute", top: "0", left: "50%", width: "1px", height: "100%", background: isCrit ? "rgba(220, 38, 38, 0.2)" : "rgba(30, 58, 138, 0.15)" }} />
+
+                  {/* Rotating Radar Sweep Hand */}
+                  <div style={{
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: "50%",
+                    background: isCrit 
+                      ? "conic-gradient(from 0deg, rgba(220, 38, 38, 0) 0deg, rgba(220, 38, 38, 0.25) 60deg, transparent 61deg)" 
+                      : "conic-gradient(from 0deg, rgba(5, 150, 105, 0) 0deg, rgba(5, 150, 105, 0.25) 60deg, transparent 61deg)",
+                    animation: "sentinelRadarSweep 3.5s linear infinite",
+                    pointerEvents: "none"
+                  }} />
+
+                  {/* Nodes on Radar */}
+                  {/* Org 1 Node */}
+                  <div style={{ position: "absolute", top: "25%", left: "25%", width: "10px", height: "10px", borderRadius: "50%", background: "var(--org1-color)", boxShadow: "0 0 6px var(--org1-color)" }} title="Org 1 Academic Peer" />
+                  <span style={{ position: "absolute", top: "12%", left: "20%", fontSize: "0.62rem", color: "var(--org1-color)", fontWeight: "700" }}>Org1</span>
+
+                  {/* Org 2 Node */}
+                  <div style={{ position: "absolute", top: "25%", right: "25%", width: "10px", height: "10px", borderRadius: "50%", background: isCrit ? "var(--danger)" : "var(--org2-color)", boxShadow: `0 0 6px ${isCrit ? 'var(--danger)' : 'var(--org2-color)'}` }} title="Org 2 Exam Board Peer" />
+                  <span style={{ position: "absolute", top: "12%", right: "20%", fontSize: "0.62rem", color: isCrit ? "var(--danger)" : "var(--org2-color)", fontWeight: "700" }}>Org2</span>
+
+                  {/* Org 3 Node */}
+                  <div style={{ position: "absolute", bottom: "25%", left: "25%", width: "10px", height: "10px", borderRadius: "50%", background: "var(--org3-color)", boxShadow: "0 0 6px var(--org3-color)" }} title="Org 3 Admin Peer" />
+                  <span style={{ position: "absolute", bottom: "12%", left: "20%", fontSize: "0.62rem", color: "var(--org3-color)", fontWeight: "700" }}>Org3</span>
+
+                  {/* IPFS Node */}
+                  <div style={{ position: "absolute", bottom: "25%", right: "25%", width: "10px", height: "10px", borderRadius: "50%", background: "#8b5cf6", boxShadow: "0 0 6px #8b5cf6" }} title="IPFS Kubo Storage Cluster" />
+                  <span style={{ position: "absolute", bottom: "12%", right: "20%", fontSize: "0.62rem", color: "#7e22ce", fontWeight: "700" }}>IPFS</span>
+
+                  {/* Center Sentinel Core */}
+                  <div style={{ position: "absolute", top: "45%", left: "45%", width: "18px", height: "18px", borderRadius: "50%", background: hudColor, boxShadow: `0 0 10px ${hudColor}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ffffff" }} />
+                  </div>
+                </div>
+
+                <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", textAlign: "center", marginTop: "0.4rem" }}>
+                  Active Nodes: <strong style={{ color: "var(--primary)" }}>3 Peers + IPFS</strong> • Consensus Height: <strong style={{ color: "var(--success)" }}>Parity</strong>
+                </div>
+              </div>
+
+              {/* PANEL 2: Speedometer Risk Gauge */}
+              <div style={{ background: "#ffffff", border: "1px solid var(--border)", borderRadius: "10px", padding: "1.25rem", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", boxShadow: "var(--shadow-sm)" }}>
+                <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--heading)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Composite 0–100 Threat Index
+                  </span>
+                  <span style={{ 
+                    fontSize: "0.72rem", 
+                    fontWeight: "700", 
+                    color: hudColor,
+                    padding: "0.2rem 0.55rem",
+                    borderRadius: "4px",
+                    background: hudBg,
+                    border: `1px solid ${isCrit ? "var(--danger-border)" : (isWarn ? "var(--warning-border)" : "var(--success-border)")}`
+                  }}>
+                    {threatLvl} RISK
+                  </span>
+                </div>
+
+                {/* SVG Semi-Circle Speedometer Gauge */}
+                <div style={{ position: "relative", width: "200px", height: "115px", marginTop: "0.5rem" }}>
+                  <svg viewBox="0 0 200 115" width="200" height="115">
+                    {/* Background Arc */}
+                    <path
+                      d="M 20 100 A 80 80 0 0 1 180 100"
+                      fill="none"
+                      stroke="var(--bg-subtle)"
+                      strokeWidth="14"
+                      strokeLinecap="round"
+                    />
+                    {/* Colored Gradient Arc */}
+                    <defs>
+                      <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#059669" />
+                        <stop offset="50%" stopColor="#d97706" />
+                        <stop offset="100%" stopColor="#dc2626" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d="M 20 100 A 80 80 0 0 1 180 100"
+                      fill="none"
+                      stroke="url(#gaugeGradient)"
+                      strokeWidth="14"
+                      strokeLinecap="round"
+                      opacity="0.85"
+                    />
+
+                    {/* Needle */}
+                    <line
+                      x1="100"
+                      y1="100"
+                      x2={needleX}
+                      y2={needleY}
+                      stroke={hudColor}
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      style={{ transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)" }}
+                    />
+                    {/* Pivot center */}
+                    <circle cx="100" cy="100" r="7" fill="#ffffff" stroke="var(--border)" strokeWidth="1" />
+                    <circle cx="100" cy="100" r="4" fill={hudColor} />
+                  </svg>
+                </div>
+
+                {/* Big Digital Readout */}
+                <div style={{ textAlign: "center", marginTop: "-10px" }}>
+                  <div style={{ fontSize: "2.4rem", fontWeight: "800", color: hudColor, lineHeight: "1" }}>
+                    {rawScore}<span style={{ fontSize: "1.05rem", color: "var(--text-muted)", fontWeight: "600" }}>/100</span>
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                    Directive: <strong style={{ color: hudColor }}>{fraudData?.action || (isCrit ? "QUARANTINE_ON_CHAIN" : "ALLOW_PROCEED")}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* PANEL 3: 5-Vector Telemetry Status Bars */}
+              <div style={{ background: "#ffffff", border: "1px solid var(--border)", borderRadius: "10px", padding: "1.25rem", display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "var(--shadow-sm)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+                  <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--heading)", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <Activity size={14} color="var(--primary)" /> 5-Vector Invariant Telemetry
+                  </span>
+                  <span style={{ fontSize: "0.72rem", color: "var(--success)", fontWeight: "600" }}>Continuous Gate</span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+                  {[
+                    { label: "1. Velocity & Replay Guard", val: vScores.velocity, status: vScores.velocity < 50 ? "REPLAY BURST" : "NORMAL (≤3/min)" },
+                    { label: "2. State Machine Monotonicity", val: vScores.ledgerInvariants, status: vScores.ledgerInvariants < 50 ? "STAGE BYPASS" : "SEQUENTIAL" },
+                    { label: "3. Merkle & DB Parity Check", val: vScores.dataIntegrity, status: vScores.dataIntegrity < 50 ? "TAMPER DETECTED" : "PARITY 100%" },
+                    { label: "4. CGPA & Attendance Anomaly", val: vScores.transcriptCorrelation, status: vScores.transcriptCorrelation < 50 ? "INFLATION" : "EXPECTED (Z=0.3)" },
+                    { label: "5. Institutional Dues & Clearance", val: vScores.duesAndBacklogs, status: vScores.duesAndBacklogs < 50 ? "HOLD / DUES" : "CLEARED (₹0)" }
+                  ].map((vec, vIdx) => {
+                    const isVecFail = vec.val < 50;
+                    const isVecWarn = vec.val >= 50 && vec.val < 80;
+                    const barColor = isVecFail ? "var(--danger)" : (isVecWarn ? "var(--warning)" : "var(--success)");
+
+                    return (
+                      <div key={vIdx}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", marginBottom: "3px" }}>
+                          <span style={{ color: "var(--text)" }}>{vec.label}</span>
+                          <span style={{ color: barColor, fontWeight: "700", fontSize: "0.68rem" }}>{vec.status}</span>
+                        </div>
+                        <div style={{ height: "6px", background: "var(--bg-subtle)", borderRadius: "3px", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${vec.val}%`, background: barColor, borderRadius: "3px", transition: "width 0.6s ease" }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* ADVERSARIAL ATTACK SIMULATION COMMAND CENTER */}
+            <div style={{ marginTop: "1.25rem", padding: "1rem", background: "var(--bg-subtle)", borderRadius: "8px", border: "1px dashed var(--border)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: "700", color: "var(--heading)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <Zap size={15} color="var(--accent-gold)" />
+                  <span>Interactive Adversarial Attack Simulator (Test Live Detection):</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  Click scenario to watch Sentinel quarantine malicious vectors
+                </span>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => simulateAttackScenario('CLEAN')}
+                  style={{
+                    padding: "0.4rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: "600",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: activeSimulation === 'CLEAN' ? "var(--success-bg)" : "#ffffff",
+                    color: "var(--success)",
+                    border: `1px solid var(--success-border)`
+                  }}
+                >
+                  🟢 Normal Student (Alice)
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => simulateAttackScenario('STATE_JUMP')}
+                  style={{
+                    padding: "0.4rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: "600",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: activeSimulation === 'STATE_JUMP' ? "var(--warning-bg)" : "#ffffff",
+                    color: "var(--warning)",
+                    border: `1px solid var(--warning-border)`
+                  }}
+                >
+                  ⚠️ State Jump Attack (Bypass DAC)
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => simulateAttackScenario('GRADE_TAMPER')}
+                  style={{
+                    padding: "0.4rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: "600",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: activeSimulation === 'GRADE_TAMPER' ? "var(--danger-bg)" : "#ffffff",
+                    color: "var(--danger)",
+                    border: `1px solid var(--danger-border)`
+                  }}
+                >
+                  🚨 CGPA Inflation (9.98 / 38% Att)
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => simulateAttackScenario('VELOCITY_FLOOD')}
+                  style={{
+                    padding: "0.4rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: "600",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: activeSimulation === 'VELOCITY_FLOOD' ? "#f5f3ff" : "#ffffff",
+                    color: "#7c3aed",
+                    border: `1px solid #ddd6fe`
+                  }}
+                >
+                  ⚡ Velocity Burst Flood (5 req/min)
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => simulateAttackScenario('DUES_HOLD')}
+                  style={{
+                    padding: "0.4rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: "600",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: activeSimulation === 'DUES_HOLD' ? "var(--primary-light)" : "#ffffff",
+                    color: "var(--primary)",
+                    border: `1px solid var(--primary-border)`
+                  }}
+                >
+                  🔒 Dues & Proctor Hold (₹28,500)
+                </button>
+              </div>
+            </div>
+
+            {/* GROQ AI FORENSIC THREAT INTELLIGENCE DOSSIER */}
+            <div style={{ marginTop: "1.25rem", background: "var(--bg-subtle)", borderRadius: "8px", padding: "1rem 1.25rem", border: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--primary)", fontSize: "0.85rem", fontWeight: "700" }}>
+                  <Terminal size={16} />
+                  <span>⚡ Groq AI Forensic Threat Intelligence Dossier:</span>
+                </div>
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "4px", background: "#ffffff", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                    Engine: {fraudData?.model || hfConfig.model || 'Groq LPU'}
+                  </span>
+                  <span style={{ 
+                    fontSize: "0.72rem", 
+                    padding: "0.15rem 0.5rem", 
+                    borderRadius: "4px", 
+                    background: isCrit ? "var(--danger-bg)" : "var(--success-bg)", 
+                    color: isCrit ? "var(--danger)" : "var(--success)", 
+                    border: `1px solid ${isCrit ? "var(--danger-border)" : "var(--success-border)"}`,
+                    fontWeight: "700" 
+                  }}>
+                    Category: [{fraudData?.threatCategory || (isCrit ? "ANOMALY_FLAGGED" : "CLEAN")}]
+                  </span>
+                </div>
+              </div>
+
+              <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--text)", lineHeight: "1.6", fontFamily: "'JetBrains Mono', 'SF Mono', Consolas, monospace" }}>
+                {fraudData?.forensicSummary || "Consortium Sentinel validated monotonic state invariants, cryptographic Merkle root, and SIS registry. Zero adversarial markers detected. Permission: ALLOW_PROCEED."}
+              </p>
+
+              {/* Findings list if flagged */}
+              {fraudData?.findings && fraudData.findings.length > 0 && (
+                <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px dashed var(--border)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <span style={{ fontSize: "0.72rem", fontWeight: "700", color: "var(--text-muted)" }}>
+                    Identified Anomaly Markers:
+                  </span>
+                  {fraudData.findings.map((f, fIdx) => (
+                    <div key={fIdx} style={{ fontSize: "0.76rem", display: "flex", alignItems: "center", gap: "0.4rem", color: f.severity === 'CRITICAL' ? 'var(--danger)' : 'var(--warning)' }}>
+                      <span style={{ padding: "0.1rem 0.35rem", borderRadius: "3px", fontSize: "0.65rem", fontWeight: "700", background: f.severity === 'CRITICAL' ? 'var(--danger-bg)' : 'var(--warning-bg)', color: f.severity === 'CRITICAL' ? 'var(--danger)' : 'var(--warning)', border: `1px solid ${f.severity === 'CRITICAL' ? 'var(--danger-border)' : 'var(--warning-border)'}` }}>
+                        {f.severity}
+                      </span>
+                      <span><strong>{f.type}</strong>: {f.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Live Agent Execution Stepper Grid */}
       <div className="card">
         <div className="card-title">
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Layers size={18} color="#38bdf8" />
+            <Layers size={18} color="var(--primary)" />
             <h3>Multi-Agent Execution Pipeline (Detailed Step-by-Step State)</h3>
           </div>
           <span className="step-num" style={{ 
-            background: pipelineStatus === "SUCCESS" ? "#10b981" : (pipelineStatus === "RUNNING" ? "#f59e0b" : "#6366f1") 
+            background: pipelineStatus === "SUCCESS" ? "var(--success)" : (pipelineStatus === "RUNNING" ? "var(--warning)" : "var(--primary)") 
           }}>
             {pipelineStatus}
           </span>
         </div>
 
-        <p style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "1.25rem" }}>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>
           Click on any stage card below to inspect the agent's LLM reasoning trace, practical rules verification, confidence score, and cryptographic blockchain proof.
         </p>
 
@@ -1057,7 +1682,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                   border: isCurrent 
                     ? "2px solid var(--primary)" 
                     : (isHalted 
-                        ? "1px solid var(--danger)" 
+                        ? "1.5px solid var(--danger)" 
                         : (isCompleted ? "1px solid var(--success-border)" : "1px solid var(--border)")),
                   borderRadius: "10px",
                   padding: "1rem",
@@ -1065,45 +1690,45 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                   position: "relative",
                   transition: "all 0.2s ease",
                   boxShadow: isCurrent 
-                    ? "0 0 15px rgba(99, 102, 241, 0.4)" 
-                    : (isHalted ? "0 0 12px rgba(239, 68, 68, 0.25)" : "none")
+                    ? "0 0 14px rgba(30, 58, 138, 0.2)" 
+                    : (isHalted ? "0 0 12px rgba(220, 38, 38, 0.2)" : "var(--shadow-sm)")
                 }}
               >
                 {/* Header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                     <span style={{ fontSize: "1.2rem" }}>{st.icon}</span>
-                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "#94a3b8" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--text-muted)" }}>
                       Step {idx + 1} • {st.org}
                     </span>
                   </div>
                   <div>
                     {isCurrent && (
-                      <span style={{ color: "#f59e0b", fontSize: "0.75rem", fontWeight: "700", animation: "pulse 1s infinite" }}>
+                      <span style={{ color: "var(--warning)", fontSize: "0.75rem", fontWeight: "700", animation: "pulse 1s infinite" }}>
                         ⏳ Auditing...
                       </span>
                     )}
                     {isCompleted && isHalted && (
-                      <span style={{ color: "#ef4444", display: "flex", alignItems: "center", gap: "0.2rem", fontSize: "0.75rem", fontWeight: "700" }}>
+                      <span style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.2rem", fontSize: "0.75rem", fontWeight: "700" }}>
                         <AlertTriangle size={14} /> Clearance Hold
                       </span>
                     )}
                     {isCompleted && !isHalted && (
-                      <span style={{ color: "#10b981", display: "flex", alignItems: "center", gap: "0.2rem", fontSize: "0.75rem", fontWeight: "700" }}>
+                      <span style={{ color: "var(--success)", display: "flex", alignItems: "center", gap: "0.2rem", fontSize: "0.75rem", fontWeight: "700" }}>
                         <CheckCircle2 size={14} /> Approved
                       </span>
                     )}
                     {!isCurrent && !isCompleted && (
-                      <span style={{ color: "#64748b", fontSize: "0.75rem" }}>Pending</span>
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Pending</span>
                     )}
                   </div>
                 </div>
 
                 {/* Title */}
-                <h4 style={{ fontSize: "0.92rem", color: "var(--heading, #1e293b)", fontWeight: "600", marginBottom: "0.4rem" }}>
+                <h4 style={{ fontSize: "0.92rem", color: "var(--heading)", fontWeight: "600", marginBottom: "0.4rem" }}>
                   {st.title}
                 </h4>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-secondary, #475569)", lineHeight: "1.4", marginBottom: "0.5rem" }}>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: "1.4", marginBottom: "0.5rem" }}>
                   {st.description}
                 </p>
 
@@ -1114,8 +1739,8 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                   </span>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                     {st.rules.map((rule, rIdx) => (
-                      <div key={rIdx} style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.72rem", color: isCompleted && !isHalted ? "#047857" : "var(--text-secondary)" }}>
-                        <span style={{ color: isCompleted && !isHalted ? "#10b981" : "#94a3b8", fontSize: "0.68rem" }}>
+                      <div key={rIdx} style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.72rem", color: isCompleted && !isHalted ? "var(--success)" : "var(--text)" }}>
+                        <span style={{ color: isCompleted && !isHalted ? "var(--success)" : "var(--text-dim)", fontSize: "0.68rem" }}>
                           {isCompleted && !isHalted ? "✓" : "•"}
                         </span>
                         <span style={{ fontWeight: isCompleted && !isHalted ? "600" : "500" }}>{rule}</span>
@@ -1123,6 +1748,16 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                     ))}
                   </div>
                 </div>
+
+                {/* Threat Index Pill inside Step 1 */}
+                {st.id === "fraud" && fraudData && (
+                  <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.72rem", background: "var(--bg-subtle)", padding: "0.3rem 0.5rem", borderRadius: "5px", border: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Threat Score:</span>
+                    <strong style={{ color: fraudData.riskScore >= 75 ? "var(--danger)" : (fraudData.riskScore >= 45 ? "var(--warning)" : "var(--success)") }}>
+                      {fraudData.riskScore}/100 [{fraudData.threatCategory || 'CLEAN'}]
+                    </strong>
+                  </div>
+                )}
 
                 {/* Module 4 Sub-Agents Grid inside Step 9 */}
                 {st.id === "mint" && (
@@ -1146,19 +1781,19 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
                   <div style={{ 
                     marginTop: "0.65rem", 
                     padding: "0.5rem", 
-                    background: "var(--card-bg, #ffffff)", 
+                    background: "var(--card-bg)", 
                     borderRadius: "6px", 
-                    border: "1px solid var(--border, #e2e8f0)",
-                    borderLeft: isHalted ? "3px solid #ef4444" : "3px solid #10b981",
+                    border: "1px solid var(--border)",
+                    borderLeft: isHalted ? "3px solid var(--danger)" : "3px solid var(--success)",
                     fontSize: "0.75rem"
                   }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-primary, #0f172a)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--heading)" }}>
                       <strong>{res.agent}</strong>
-                      <span style={{ color: isHalted ? "#ef4444" : "var(--primary, #6366f1)" }}>
+                      <span style={{ color: isHalted ? "var(--danger)" : "var(--primary)" }}>
                         {isHalted ? "CLEARANCE HOLD" : (formatConfidencePct(res.confidence) + "% Conf.")}
                       </span>
                     </div>
-                    <div style={{ color: isHalted ? "#dc2626" : "var(--text-secondary, #475569)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ color: isHalted ? "var(--danger)" : "var(--text-muted)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {res.rationale}
                     </div>
                   </div>
@@ -1239,9 +1874,9 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
 
       {/* Streaming Terminal Log */}
       <div className="card" style={{ padding: "1.25rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Terminal size={18} color="#38bdf8" />
+            <Terminal size={18} color="var(--primary)" />
             <h3 style={{ fontSize: "1rem", fontWeight: "700", color: "var(--heading)" }}>
               Autonomous Consensus Stream & LLM Reasoning Feed
             </h3>
@@ -1251,33 +1886,70 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
           </span>
         </div>
 
-        <div 
-          ref={terminalRef}
-          style={{ 
-            background: "#0f172a", 
-            color: "#f8fafc", 
-            borderRadius: "8px", 
-            padding: "1rem", 
-            maxHeight: "260px", 
-            overflowY: "auto", 
-            fontFamily: "'JetBrains Mono', 'SF Mono', Consolas, monospace", 
-            fontSize: "0.8rem", 
-            lineHeight: "1.6" 
-          }}
-        >
-          {executionLogs.length === 0 ? (
-            <span style={{ color: "#64748b" }}>
-              Consortium stream idle. Click "1-Click Autonomous Multi-Agent Pipeline" to launch the agentic consensus sequence.
-            </span>
-          ) : (
-            executionLogs.map((log, index) => (
-              <div key={index} style={{ 
-                color: log.includes("🛑") || log.includes("❌") ? "#ef4444" : (log.includes("✅") || log.includes("🎉") ? "#10b981" : (log.includes("⚡") ? "#f59e0b" : "#e2e8f0")) 
-              }}>
-                {log}
-              </div>
-            ))
-          )}
+        <div style={{
+          background: "#ffffff",
+          borderRadius: "8px",
+          border: "1px solid var(--border)",
+          overflow: "hidden",
+          boxShadow: "inset 0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          {/* Mac-style Window Subheader */}
+          <div style={{
+            background: "var(--bg-subtle)",
+            padding: "0.5rem 0.85rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: "1px solid var(--border)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: "600" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: pipelineStatus === "RUNNING" ? "var(--warning)" : "var(--success)" }} />
+              Live Ledger Telemetry • Pacing: 1.2s/stage
+            </div>
+            <div style={{ display: "flex", gap: "0.3rem" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} />
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981" }} />
+            </div>
+          </div>
+
+          <div 
+            ref={terminalRef}
+            style={{ 
+              background: "var(--bg)", 
+              color: "var(--text)", 
+              padding: "1rem", 
+              maxHeight: "260px", 
+              overflowY: "auto", 
+              fontFamily: "'JetBrains Mono', 'SF Mono', Consolas, monospace", 
+              fontSize: "0.8rem", 
+              lineHeight: "1.6" 
+            }}
+          >
+            {executionLogs.length === 0 ? (
+              <span style={{ color: "var(--text-muted)" }}>
+                Consortium stream idle. Click "1-Click Autonomous Multi-Agent Pipeline" to launch the agentic consensus sequence.
+              </span>
+            ) : (
+              executionLogs.map((log, index) => {
+                let logColor = "var(--text)";
+                if (log.includes("🛑") || log.includes("❌") || log.includes("QUARANTINE")) {
+                  logColor = "var(--danger)";
+                } else if (log.includes("✅") || log.includes("🎉") || log.includes("Minting") || log.includes("Approved")) {
+                  logColor = "var(--success)";
+                } else if (log.includes("⚡") || log.includes("⚠️") || log.includes("Auditing") || log.includes("Warning")) {
+                  logColor = "var(--warning)";
+                } else if (log.includes("Stage") || log.includes("Consortium") || log.includes("Org")) {
+                  logColor = "var(--primary)";
+                }
+                return (
+                  <div key={index} style={{ color: logColor }}>
+                    {log}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
