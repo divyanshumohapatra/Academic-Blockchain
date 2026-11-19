@@ -10,7 +10,9 @@ import LedgerExplorer from './components/LedgerExplorer';
 import AgenticModule from './components/AgenticModule';
 import FacultyPortal from './components/FacultyPortal';
 import FacultyAdvisorModule from './components/FacultyAdvisorModule';
+import ChatbotPortal from './components/ChatbotPortal';
 import ChatbotWidget from './components/ChatbotWidget';
+import TelemetryDashboard from './components/TelemetryDashboard';
 import { 
   ClipboardList, 
   UserCheck, 
@@ -20,12 +22,14 @@ import {
   Building2,
   Bot,
   GraduationCap,
-  Users
+  Users,
+  MessageSquare,
+  Activity
 } from 'lucide-react';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('consortium'); // 'consortium' | 'employer'
-  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'faculty', 'advisor', 'agents', 'students', 'revoke', 'ledger'
+  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'faculty', 'advisor', 'agents', 'chatbot', 'students', 'revoke', 'ledger'
   const [activeRequestId, setActiveRequestId] = useState('REQ-2024-001');
   const [readyRequest, setReadyRequest] = useState(null);
 
@@ -87,6 +91,21 @@ export default function App() {
                 🤖 Autonomous Multi-Agent AI
               </button>
 
+              {/* Chatbot Tab - Clean, No Group 5 mention */}
+              <button 
+                className={`tab-btn ${activeTab === 'chatbot' ? 'active' : ''}`}
+                onClick={() => setActiveTab('chatbot')}
+                style={{
+                  background: activeTab === 'chatbot' ? 'linear-gradient(135deg, #4f46e5, #0284c7)' : 'rgba(79, 70, 229, 0.08)',
+                  borderColor: 'rgba(79, 70, 229, 0.3)',
+                  color: activeTab === 'chatbot' ? '#ffffff' : '#4f46e5',
+                  fontWeight: '700'
+                }}
+              >
+                <MessageSquare size={16} />
+                Chatbot
+              </button>
+
               <button 
                 className={`tab-btn ${activeTab === 'students' ? 'active' : ''}`}
                 onClick={() => setActiveTab('students')}
@@ -109,6 +128,14 @@ export default function App() {
               >
                 <Database size={16} />
                 Ledger Explorer
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'telemetry' ? 'active' : ''}`}
+                onClick={() => setActiveTab('telemetry')}
+              >
+                <Activity size={16} />
+                Health & Telemetry (6.2)
               </button>
             </nav>
 
@@ -142,6 +169,11 @@ export default function App() {
               />
             )}
 
+            {/* Chatbot Tab with continuous state persistence across tab switches */}
+            <div style={{ display: activeTab === 'chatbot' ? 'block' : 'none' }}>
+              <ChatbotPortal />
+            </div>
+
             {activeTab === 'students' && <StudentModule />}
 
             {activeTab === 'revoke' && (
@@ -149,10 +181,13 @@ export default function App() {
             )}
 
             {activeTab === 'ledger' && <LedgerExplorer />}
+
+            {activeTab === 'telemetry' && <TelemetryDashboard />}
           </>
         )}
       </main>
 
+      {/* Floating Chatbot Widget Available Across All Modules */}
       <ChatbotWidget />
 
       <footer className="footer">
