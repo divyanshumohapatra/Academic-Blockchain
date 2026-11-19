@@ -393,13 +393,6 @@ class AcademicContract extends Contract {
     await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
     return JSON.stringify(student);
   }
-    await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
-    
-    // Store reverse-lookup by DID
-    await ctx.stub.putState(`DID_${did}`, Buffer.from(studentId));
-
-    return JSON.stringify(student);
-  }
 
   async GetStudent(ctx, studentId) {
     const studentAsBytes = await ctx.stub.getState(`STUDENT_${studentId}`);
