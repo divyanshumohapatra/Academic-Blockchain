@@ -144,7 +144,7 @@ async function runTests() {
     // ------------------------------------------------------------------------
     console.log('\n--- 4. Chatbot Role-Based Access Control ---');
     try {
-      // 4.1 Student asks about Cloudflare R2 -> RBAC Denied
+      // 4.1 Student asks about Cloudflare R2 status -> RBAC Denied
       const studentR2Query = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
@@ -152,25 +152,65 @@ async function runTests() {
       });
       const studentR2Data = await studentR2Query.json();
       report(
-        'Chatbot: Student query for Cloudflare R2 Denied',
+        'Chatbot: Student query for Cloudflare R2 status Denied',
         studentR2Data.intent === 'RBAC_FORBIDDEN' && studentR2Data.reply.includes('Access Denied'),
         `Intent: ${studentR2Data.intent}`
       );
 
-      // 4.2 Admin asks about Cloudflare R2 -> Authorized status returned
-      const adminR2Query = await fetch(`${baseUrl}/api/chat`, {
+      // 4.2 Re-verify: Cloudflare link can ONLY be accessed by ADMIN:
+      // Test STUDENT attempting to get Cloudflare link
+      const studentLinkQuery = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-role': 'ADMIN' },
-        body: JSON.stringify({ message: 'Check Cloudflare R2 backup status', role: 'ADMIN' })
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Give me cloudflare link for CERT-2024-001', role: 'STUDENT' })
       });
-      const adminR2Data = await adminR2Query.json();
+      const studentLinkData = await studentLinkQuery.json();
       report(
-        'Chatbot: Admin query for Cloudflare R2 Authorized',
-        adminR2Data.intent === 'R2_STATUS' && adminR2Data.reply.includes('Cloudflare R2 Enterprise Backup Status'),
-        `Intent: ${adminR2Data.intent}`
+        'Chatbot: Student denied Cloudflare download link',
+        studentLinkData.intent === 'RBAC_FORBIDDEN' && studentLinkData.reply.includes('Access Denied'),
+        `Intent: ${studentLinkData.intent}`
       );
 
-      // 4.3 Admin requests R2 presigned link for CERT-2024-001
+      // Test FACULTY attempting to get Cloudflare link
+      const facultyLinkQuery = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Give me cloudflare link for CERT-2024-001', role: 'FACULTY' })
+      });
+      const facultyLinkData = await facultyLinkQuery.json();
+      report(
+        'Chatbot: Faculty denied Cloudflare download link',
+        facultyLinkData.intent === 'RBAC_FORBIDDEN' && facultyLinkData.reply.includes('Access Denied'),
+        `Intent: ${facultyLinkData.intent}`
+      );
+
+      // Test HOD attempting to get Cloudflare link
+      const hodLinkQuery = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'HOD' },
+        body: JSON.stringify({ message: 'Give me cloudflare link for CERT-2024-001', role: 'HOD' })
+      });
+      const hodLinkData = await hodLinkQuery.json();
+      report(
+        'Chatbot: HOD denied Cloudflare download link',
+        hodLinkData.intent === 'RBAC_FORBIDDEN' && hodLinkData.reply.includes('Access Denied'),
+        `Intent: ${hodLinkData.intent}`
+      );
+
+      // Test EXAM_CONTROLLER attempting to get Cloudflare link
+      const examLinkQuery = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'EXAM_CONTROLLER' },
+        body: JSON.stringify({ message: 'Give me cloudflare link for CERT-2024-001', role: 'EXAM_CONTROLLER' })
+      });
+      const examLinkData = await examLinkQuery.json();
+      report(
+        'Chatbot: Exam Controller denied Cloudflare download link',
+        examLinkData.intent === 'RBAC_FORBIDDEN' && examLinkData.reply.includes('Access Denied'),
+        `Intent: ${examLinkData.intent}`
+      );
+
+      // Test ADMIN requesting Cloudflare link -> Authorized!
       const adminCertLinkQuery = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-role': 'ADMIN' },
@@ -178,12 +218,38 @@ async function runTests() {
       });
       const adminCertLinkData = await adminCertLinkQuery.json();
       report(
-        'Chatbot: Admin presigned R2 link for CERT-2024-001',
+        'Chatbot: Admin authorized Cloudflare R2 download link',
         adminCertLinkData.intent === 'R2_BACKUP_LINK' && adminCertLinkData.reply.includes('Presigned Download URL'),
         `Intent: ${adminCertLinkData.intent}`
       );
 
-      // 4.4 Student asks to lock grades (privileged action) -> Role Restricted
+      // Test ADMIN requesting Cloudflare status
+      const adminR2Query = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'ADMIN' },
+        body: JSON.stringify({ message: 'Check Cloudflare R2 backup status', role: 'ADMIN' })
+      });
+      const adminR2Data = await adminR2Query.json();
+      report(
+        'Chatbot: Admin query for Cloudflare R2 status Authorized',
+        adminR2Data.intent === 'R2_STATUS' && adminR2Data.reply.includes('Cloudflare R2 Enterprise Backup Status'),
+        `Intent: ${adminR2Data.intent}`
+      );
+
+      // Test ADMIN asking for link help without specifying cert ID
+      const adminLinkHelpQuery = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'ADMIN' },
+        body: JSON.stringify({ message: 'Give me cloudflare download link', role: 'ADMIN' })
+      });
+      const adminLinkHelpData = await adminLinkHelpQuery.json();
+      report(
+        'Chatbot: Admin link generator help prompt without ID',
+        adminLinkHelpData.intent === 'R2_LINK_HELP',
+        `Intent: ${adminLinkHelpData.intent}`
+      );
+
+      // 4.3 Student asks to lock grades (privileged action) -> Role Restricted
       const studentPrivilegedQuery = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
@@ -196,7 +262,20 @@ async function runTests() {
         `Intent: ${studentPrivData.intent}`
       );
 
-      // 4.5 Public verification open to everyone (Student)
+      // 4.4 Faculty searches for instructor dossier
+      const facultyQuery = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Find Dr. Rajesh Kumar', role: 'FACULTY' })
+      });
+      const facultyData = await facultyQuery.json();
+      report(
+        'Chatbot: Faculty queries instructor dossier',
+        facultyData.intent === 'FACULTY_LOOKUP' && facultyData.reply.includes('Rajesh Kumar'),
+        `Intent: ${facultyData.intent}`
+      );
+
+      // 4.5 Public verification open to Student
       const publicVerifyQuery = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
@@ -207,6 +286,19 @@ async function runTests() {
         'Chatbot: Public Verification open to Student',
         publicVerifyData.reply.includes('CERT-101') || publicVerifyData.intent === 'STATUS_CHECK',
         `Intent: ${publicVerifyData.intent}`
+      );
+
+      // 4.6 HOD queries milestone approvers
+      const hodApproverQuery = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'HOD' },
+        body: JSON.stringify({ message: 'Who approved CERT-101?', role: 'HOD' })
+      });
+      const hodApproverData = await hodApproverQuery.json();
+      report(
+        'Chatbot: HOD queries milestone approvers',
+        hodApproverData.intent === 'WHO_APPROVED' || hodApproverData.reply.includes('approved'),
+        `Intent: ${hodApproverData.intent}`
       );
     } catch (err) {
       report('Chatbot RBAC Tests', false, err.message);

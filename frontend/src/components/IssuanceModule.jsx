@@ -77,18 +77,18 @@ const MODULE_4_AGENTS = [
     id: "ipfs",
     stepName: "IPFS_STORAGE_AUDITED",
     name: "Agent-IPFS-Custodian",
-    title: "3. Decentralized IPFS Storage Custodian",
-    role: "Decentralized IPFS Pinning & Proof-of-Storage Auditor",
+    title: "3. IPFS Kubo & Cloudflare R2 Dual Custodian",
+    role: "Decentralized IPFS Pinning & Cloudflare R2 Enterprise Backup Custodian",
     org: "Consortium Storage",
-    msp: "Kubo Node 5001/8080",
+    msp: "IPFS Kubo + Cloudflare R2",
     icon: "🌐",
     color: "#0ea5e9",
     confidence: 0.99,
-    description: "Pins certificate PDF to IPFS cluster, runs round-trip retrieval probe, and verifies bit-perfect checksum.",
+    description: "Pins certificate PDF to IPFS Kubo cluster and synchronously mirrors enterprise backup to Cloudflare R2 S3 storage with bit-perfect SHA-256 verification.",
     rules: [
-      "Pinning to Distributed IPFS Kubo Node / Cluster",
-      "Automated Round-Trip Retrieval Verification Probe",
-      "Exact 0-Byte Difference SHA-256 Integrity Guarantee"
+      "Primary Pinning to Distributed IPFS Kubo Node / Cluster",
+      "Enterprise Cloud Backup Archival to Cloudflare R2 Bucket",
+      "Exact 0-Byte Difference SHA-256 Dual-Storage Verification"
     ]
   },
   {
@@ -102,9 +102,10 @@ const MODULE_4_AGENTS = [
     icon: "⛓️",
     color: "#10b981",
     confidence: 0.99,
-    description: "Submits IssueCertificate proposal across Org1, Org2, and Org3, anchoring CID and digest permanently.",
+    description: "Submits IssueCertificate proposal across Org1, Org2, and Org3, permanently anchoring IPFS CID, Cloudflare R2 URI, and document digest.",
     rules: [
       "Hyperledger Fabric IssueCertificate Chaincode Proposal",
+      "Anchors IPFS CID & Cloudflare R2 Backup Storage URI",
       "Consortium Multi-Org Endorsement Policy Verification",
       "Permanent Immutable State Commit with Raft Block Audit"
     ]
@@ -818,10 +819,10 @@ export default function IssuanceModule({ activeRequestId, setActiveRequestId, tr
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
           <h4 style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--heading)", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0 }}>
             <Layers size={16} color="var(--primary)" />
-            Module 4 Autonomous Agent Ecosystem
+            Module 4 Autonomous Agent Ecosystem (IPFS + Cloudflare R2 Dual Archival)
           </h4>
           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-            Sequential AI Consensus & Verification Sequence
+            Sequential AI Consensus Sequence • Primary IPFS Kubo + Cloudflare R2 Enterprise Backup
           </span>
         </div>
 
@@ -1003,13 +1004,13 @@ export default function IssuanceModule({ activeRequestId, setActiveRequestId, tr
             <div>
               <h4 style={{ color: "var(--success)", fontSize: "1.1rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0 }}>
                 <CheckCircle2 size={20} />
-                🎉 Certificate Successfully Minted, Pinned to IPFS & Anchored!
+                🎉 Certificate Successfully Minted, Pinned to IPFS & Backed Up to Cloudflare R2!
               </h4>
               <p style={{ color: "#065f46", fontSize: "0.85rem", margin: "4px 0 1rem 0" }}>
-                All 4 Module 4 autonomous agents successfully reached consensus. The credential is now verifiable on-chain and in IPFS.
+                All 4 Module 4 autonomous agents successfully reached consensus. The credential is now verifiable on-chain, stored in IPFS, and backed up in Cloudflare R2.
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem", fontSize: "0.8rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem", fontSize: "0.8rem" }}>
                 <div style={{ background: "#ffffff", border: "1px solid var(--success-border)", padding: "0.6rem 0.85rem", borderRadius: "6px" }}>
                   <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>Certificate ID:</span>
                   <div style={{ fontWeight: "700", color: "var(--primary)", fontSize: "0.95rem" }}>{issueResult.certId}</div>
@@ -1025,9 +1026,16 @@ export default function IssuanceModule({ activeRequestId, setActiveRequestId, tr
                 </div>
 
                 <div style={{ background: "#ffffff", border: "1px solid var(--success-border)", padding: "0.6rem 0.85rem", borderRadius: "6px" }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>Cloudflare R2 Backup:</span>
+                  <div style={{ fontWeight: "600", color: "#0284c7", fontFamily: "monospace", fontSize: "0.72rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={issueResult.r2Uri || `r2://academic-certificates/certificates/${issueResult.certId}.pdf`}>
+                    ☁️ {issueResult.r2Uri || `r2://academic-certificates/...`}
+                  </div>
+                </div>
+
+                <div style={{ background: "#ffffff", border: "1px solid var(--success-border)", padding: "0.6rem 0.85rem", borderRadius: "6px" }}>
                   <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>SHA-256 Digest:</span>
-                  <div style={{ fontWeight: "600", color: "var(--accent-gold)", fontFamily: "monospace", fontSize: "0.75rem" }}>
-                    {(issueResult.sha256Hash || issueResult.docHash)?.substring(0, 24)}...
+                  <div style={{ fontWeight: "600", color: "var(--accent-gold)", fontFamily: "monospace", fontSize: "0.72rem" }}>
+                    {(issueResult.sha256Hash || issueResult.docHash)?.substring(0, 22)}...
                   </div>
                 </div>
               </div>

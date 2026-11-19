@@ -37,20 +37,53 @@ class ChatbotAgent {
       }
 
       // Admin has authorized access to Cloudflare R2!
+      let certId = null;
       const certMatch = text.match(/CERT-[A-Za-z0-9-]+/i);
       if (certMatch) {
-        const certId = certMatch[0].toUpperCase();
-        const downloadLink = await r2.getDownloadLink(`certificates/${certId}.pdf`, 900);
+        certId = certMatch[0].toUpperCase();
+      } else {
+        const stuMatch = text.match(/STU-[A-Za-z0-9-]+/i);
+        if (stuMatch) {
+          try {
+            const sisDatabase = require('../db/sisDatabase');
+            const req = sisDatabase.getCertificateRequestByStudentId(stuMatch[0].toUpperCase());
+            if (req && req.details && req.details.certId) {
+              certId = req.details.certId;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (certId) {
+        try {
+          const downloadLink = await r2.getDownloadLink(`certificates/${certId}.pdf`, 900);
+          return {
+            reply: `### ☁️ Cloudflare R2 Backup Dossier (Authorized: ${userName})\n\n` +
+                   `• **Certificate ID**: \`${certId}\`\n` +
+                   `• **Bucket**: \`${r2.BUCKET}\`\n` +
+                   `• **Primary Storage URI**: \`r2://${r2.BUCKET}/certificates/${certId}.pdf\`\n` +
+                   `• **Presigned Download URL** (Valid for 15 minutes):\n` +
+                   `  [🔗 Direct Download from Cloudflare R2](${downloadLink})\n\n` +
+                   `*Dual-Storage Archival Policy: Active (Primary IPFS Kubo + Cloudflare R2 Enterprise Backup).*`,
+            intent: 'R2_BACKUP_LINK',
+            data: { certId, downloadLink, role }
+          };
+        } catch (err) {
+          return {
+            reply: `⚠️ Error generating Cloudflare R2 download link for ${certId}: ${err.message}`,
+            intent: 'R2_ERROR'
+          };
+        }
+      }
+
+      if (lower.includes('link') || lower.includes('download')) {
         return {
-          reply: `### ☁️ Cloudflare R2 Backup Dossier (Authorized: ${userName})\n\n` +
-                 `• **Certificate ID**: \`${certId}\`\n` +
+          reply: `### ☁️ Cloudflare R2 Presigned Download Link Generator (Authorized: ${userName})\n\n` +
                  `• **Bucket**: \`${r2.BUCKET}\`\n` +
-                 `• **Primary Storage URI**: \`r2://${r2.BUCKET}/certificates/${certId}.pdf\`\n` +
-                 `• **Presigned Download URL** (Valid for 15 minutes):\n` +
-                 `  [🔗 Direct Download from Cloudflare R2](${downloadLink})\n\n` +
-                 `*Dual-Storage Archival Policy: Active (Primary IPFS Kubo + Cloudflare R2 Enterprise Backup).*`,
-          intent: 'R2_BACKUP_LINK',
-          data: { certId, downloadLink, role }
+                 `• **Access Level**: Org 3 Central Administrator (Full Authorization)\n\n` +
+                 `Please specify the **Certificate ID** or **Student Roll Number** you would like to download (e.g. \`Get Cloudflare R2 link for CERT-2024-001\` or \`Get Cloudflare link for STU-2024-001\`).`,
+          intent: 'R2_LINK_HELP',
+          data: { role, bucket: r2.BUCKET }
         };
       }
 

@@ -950,9 +950,23 @@ async function handleChatMessage(message, context = {}) {
     }
 
     // Admin has authorized access to Cloudflare R2!
+    let certId = null;
     const certMatch = message.match(/CERT-[A-Za-z0-9-]+/i);
     if (certMatch) {
-      const certId = certMatch[0].toUpperCase();
+      certId = certMatch[0].toUpperCase();
+    } else {
+      const stuMatch = message.match(/STU-[A-Za-z0-9-]+/i);
+      if (stuMatch && sisDatabase) {
+        try {
+          const req = sisDatabase.getCertificateRequestByStudentId(stuMatch[0].toUpperCase());
+          if (req && req.details && req.details.certId) {
+            certId = req.details.certId;
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (certId) {
       try {
         const downloadLink = await r2.getDownloadLink(`certificates/${certId}.pdf`, 900);
         return {
@@ -972,6 +986,17 @@ async function handleChatMessage(message, context = {}) {
           intent: 'R2_ERROR'
         };
       }
+    }
+
+    if (lower.includes('link') || lower.includes('download')) {
+      return {
+        reply: `### ☁️ Cloudflare R2 Presigned Download Link Generator (Authorized: ${userName})\n\n` +
+               `• **Bucket**: \`${r2.BUCKET}\`\n` +
+               `• **Access Level**: Org 3 Central Administrator (Full Authorization)\n\n` +
+               `Please specify the **Certificate ID** or **Student Roll Number** you would like to download (e.g. \`Get Cloudflare R2 link for CERT-2024-001\` or \`Get Cloudflare link for STU-2024-001\`).`,
+        intent: 'R2_LINK_HELP',
+        data: { role, bucket: r2.BUCKET }
+      };
     }
 
     const r2Health = await r2.checkR2Health();
