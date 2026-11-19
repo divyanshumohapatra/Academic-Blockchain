@@ -304,6 +304,260 @@ async function runTests() {
       report('Chatbot RBAC Tests', false, err.message);
     }
 
+    // ------------------------------------------------------------------------
+    // TEST 5: Specialized Role-Based Operational Features & Privacy Guards
+    // ------------------------------------------------------------------------
+    console.log('\n--- 5. Specialized Role-Based Operational Features & Privacy Guards ---');
+    try {
+      // 5.1 Faculty queries Course Roster (Allowed)
+      const facultyRosterRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Show course roster for CS501', role: 'FACULTY' })
+      });
+      const facultyRosterData = await facultyRosterRes.json();
+      report(
+        'Faculty queries Course Roster (CS501) [Allowed]',
+        facultyRosterData.intent === 'COURSE_ROSTER' && facultyRosterData.reply.includes('Course Roster'),
+        `Intent: ${facultyRosterData.intent}`
+      );
+
+      // 5.2 Student queries Course Roster (Denied)
+      const studentRosterRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Show course roster for CS501', role: 'STUDENT' })
+      });
+      const studentRosterData = await studentRosterRes.json();
+      report(
+        'Student queries Course Roster (CS501) [Denied]',
+        studentRosterData.intent === 'RBAC_FORBIDDEN' && studentRosterData.reply.includes('Access Denied'),
+        `Intent: ${studentRosterData.intent}`
+      );
+
+      // 5.3 Faculty queries CIE Marks Audit (Allowed)
+      const facultyCieRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Check CIE marks audit for CS501', role: 'FACULTY' })
+      });
+      const facultyCieData = await facultyCieRes.json();
+      report(
+        'Faculty queries CIE Marks Audit [Allowed]',
+        facultyCieData.intent === 'CIE_AUDIT' && facultyCieData.reply.includes('Continuous Internal Evaluation'),
+        `Intent: ${facultyCieData.intent}`
+      );
+
+      // 5.4 Student queries CIE Marks Audit (Denied)
+      const studentCieRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Check CIE marks audit for CS501', role: 'STUDENT' })
+      });
+      const studentCieData = await studentCieRes.json();
+      report(
+        'Student queries CIE Marks Audit [Denied]',
+        studentCieData.intent === 'RBAC_FORBIDDEN' && studentCieData.reply.includes('Access Denied'),
+        `Intent: ${studentCieData.intent}`
+      );
+
+      // 5.5 HOD queries Department Graduation Pipeline (Allowed)
+      const hodPipelineRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'HOD' },
+        body: JSON.stringify({ message: 'Department clearance pipeline', role: 'HOD' })
+      });
+      const hodPipelineData = await hodPipelineRes.json();
+      report(
+        'HOD queries Department Graduation Pipeline [Allowed]',
+        hodPipelineData.intent === 'DEPARTMENT_AUDIT' && hodPipelineData.reply.includes('Department Academic Clearance'),
+        `Intent: ${hodPipelineData.intent}`
+      );
+
+      // 5.6 Faculty queries Department Graduation Pipeline (Denied)
+      const facultyPipelineRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Department clearance pipeline', role: 'FACULTY' })
+      });
+      const facultyPipelineData = await facultyPipelineRes.json();
+      report(
+        'Faculty queries Department Graduation Pipeline [Denied]',
+        facultyPipelineData.intent === 'RBAC_FORBIDDEN' && facultyPipelineData.reply.includes('Access Denied'),
+        `Intent: ${facultyPipelineData.intent}`
+      );
+
+      // 5.7 HOD queries DAC Committee Multi-Sig Quorum (Allowed)
+      const hodDacRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'HOD' },
+        body: JSON.stringify({ message: 'DAC committee multi-sig quorum', role: 'HOD' })
+      });
+      const hodDacData = await hodDacRes.json();
+      report(
+        'HOD queries DAC Multi-Sig Quorum [Allowed]',
+        hodDacData.intent === 'DAC_QUORUM' && hodDacData.reply.includes('DAC'),
+        `Intent: ${hodDacData.intent}`
+      );
+
+      // 5.8 Exam Controller queries DAC Committee Quorum (Denied)
+      const examDacRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'EXAM_CONTROLLER' },
+        body: JSON.stringify({ message: 'DAC committee multi-sig quorum', role: 'EXAM_CONTROLLER' })
+      });
+      const examDacData = await examDacRes.json();
+      report(
+        'Exam Controller queries DAC Multi-Sig Quorum [Denied]',
+        examDacData.intent === 'RBAC_FORBIDDEN' && examDacData.reply.includes('Access Denied'),
+        `Intent: ${examDacData.intent}`
+      );
+
+      // 5.9 Exam Controller queries Exam Grade Lockdown & Merkle Root (Allowed)
+      const examLockRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'EXAM_CONTROLLER' },
+        body: JSON.stringify({ message: 'Lock examination grades and verify Merkle root', role: 'EXAM_CONTROLLER' })
+      });
+      const examLockData = await examLockRes.json();
+      report(
+        'Exam Controller queries Exam Lockdown & Merkle Root [Allowed]',
+        examLockData.intent === 'EXAM_LOCKDOWN' && examLockData.reply.includes('Merkle'),
+        `Intent: ${examLockData.intent}`
+      );
+
+      // 5.10 HOD queries Exam Grade Lockdown (Denied)
+      const hodLockRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'HOD' },
+        body: JSON.stringify({ message: 'Lock examination grades and verify Merkle root', role: 'HOD' })
+      });
+      const hodLockData = await hodLockRes.json();
+      report(
+        'HOD queries Exam Lockdown [Denied]',
+        hodLockData.intent === 'RBAC_FORBIDDEN' && hodLockData.reply.includes('Access Denied'),
+        `Intent: ${hodLockData.intent}`
+      );
+
+      // 5.11 Exam Controller queries Grade Anomaly & Tamper Audit (Allowed)
+      const examAnomalyRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'EXAM_CONTROLLER' },
+        body: JSON.stringify({ message: 'Run grade anomaly and tamper detection audit', role: 'EXAM_CONTROLLER' })
+      });
+      const examAnomalyData = await examAnomalyRes.json();
+      report(
+        'Exam Controller queries Grade Anomaly & Tamper Audit [Allowed]',
+        examAnomalyData.intent === 'GRADE_ANOMALY' && examAnomalyData.reply.includes('Grade Anomaly'),
+        `Intent: ${examAnomalyData.intent}`
+      );
+
+      // 5.12 Student queries Grade Anomaly (Denied)
+      const studentAnomalyRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Run grade anomaly and tamper detection audit', role: 'STUDENT' })
+      });
+      const studentAnomalyData = await studentAnomalyRes.json();
+      report(
+        'Student queries Grade Anomaly [Denied]',
+        studentAnomalyData.intent === 'RBAC_FORBIDDEN' && studentAnomalyData.reply.includes('Access Denied'),
+        `Intent: ${studentAnomalyData.intent}`
+      );
+
+      // 5.13 Student queries own institutional dues (Allowed for Self)
+      const studentSelfDuesRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Check my fee dues', role: 'STUDENT', studentId: 'STU-2024-001' })
+      });
+      const studentSelfDuesData = await studentSelfDuesRes.json();
+      report(
+        'Student queries Own Fee Dues (Self) [Allowed]',
+        studentSelfDuesData.intent === 'INSTITUTIONAL_DUES' && studentSelfDuesData.reply.includes('Institutional Dues'),
+        `Intent: ${studentSelfDuesData.intent}`
+      );
+
+      // 5.14 Student queries another student\'s dues (Privacy Guard Denied)
+      const studentCrossDuesRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Check fee dues for STU-2024-002', role: 'STUDENT', studentId: 'STU-2024-001' })
+      });
+      const studentCrossDuesData = await studentCrossDuesRes.json();
+      report(
+        'Student queries Other Student Dues [Privacy Guard Denied]',
+        studentCrossDuesData.intent === 'RBAC_FORBIDDEN' && studentCrossDuesData.reply.includes('Privacy Guard'),
+        `Intent: ${studentCrossDuesData.intent}`
+      );
+
+      // 5.15 Admin queries Institutional Dues Overview (Allowed)
+      const adminDuesRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'ADMIN' },
+        body: JSON.stringify({ message: 'Check institutional fee and library dues', role: 'ADMIN' })
+      });
+      const adminDuesData = await adminDuesRes.json();
+      report(
+        'Admin queries Institutional Dues Overview [Allowed]',
+        adminDuesData.intent === 'INSTITUTIONAL_DUES' && adminDuesData.reply.includes('Institutional Bursar'),
+        `Intent: ${adminDuesData.intent}`
+      );
+
+      // 5.16 Admin queries On-Chain Revocation Registry (Allowed)
+      const adminRevocationRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'ADMIN' },
+        body: JSON.stringify({ message: 'Audit on-chain revocation registry', role: 'ADMIN' })
+      });
+      const adminRevocationData = await adminRevocationRes.json();
+      report(
+        'Admin queries On-Chain Revocation Registry [Allowed]',
+        adminRevocationData.intent === 'REVOCATION_AUDIT' && adminRevocationData.reply.includes('Revocation Registry'),
+        `Intent: ${adminRevocationData.intent}`
+      );
+
+      // 5.17 Faculty queries On-Chain Revocation Registry (Denied)
+      const facultyRevocationRes = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Audit on-chain revocation registry', role: 'FACULTY' })
+      });
+      const facultyRevocationData = await facultyRevocationRes.json();
+      report(
+        'Faculty queries Revocation Registry [Denied]',
+        facultyRevocationData.intent === 'RBAC_FORBIDDEN' && facultyRevocationData.reply.includes('Access Denied'),
+        `Intent: ${facultyRevocationData.intent}`
+      );
+
+      // 5.18 Multi-Agent chat endpoint (/api/agents/chat) verifies identical RBAC
+      const agentRosterRes = await fetch(`${baseUrl}/api/agents/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'FACULTY' },
+        body: JSON.stringify({ message: 'Show course roster for CS501', role: 'FACULTY' })
+      });
+      const agentRosterData = await agentRosterRes.json();
+      report(
+        'Agent Chat API (/api/agents/chat): Faculty Course Roster [Allowed]',
+        agentRosterData.intent === 'COURSE_ROSTER' && agentRosterData.reply.includes('Course Roster'),
+        `Intent: ${agentRosterData.intent}`
+      );
+
+      const agentStudentRosterRes = await fetch(`${baseUrl}/api/agents/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-role': 'STUDENT' },
+        body: JSON.stringify({ message: 'Show course roster for CS501', role: 'STUDENT' })
+      });
+      const agentStudentRosterData = await agentStudentRosterRes.json();
+      report(
+        'Agent Chat API (/api/agents/chat): Student Course Roster [Denied]',
+        agentStudentRosterData.intent === 'RBAC_FORBIDDEN' && agentStudentRosterData.reply.includes('Access Denied'),
+        `Intent: ${agentStudentRosterData.intent}`
+      );
+    } catch (err) {
+      report('Specialized RBAC Tests', false, err.message);
+    }
+
   } finally {
     if (server) {
       server.close();

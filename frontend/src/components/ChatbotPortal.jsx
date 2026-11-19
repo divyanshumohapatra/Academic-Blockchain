@@ -30,14 +30,15 @@ const CONSORTIUM_ROLES = [
     user: 'Alice Johnson',
     email: 'alice.johnson@academic.edu',
     color: '#0284c7',
-    badge: 'Public Verification',
-    description: 'Degree verification & public status tracking',
+    badge: 'Public • Candidate Self-Service',
+    description: 'Degree verification & own bursar clearance',
     prompts: [
       "What is the status of CERT-2024-001?",
       "status of this roll number student STU-2024-001",
-      "Show me the history of CERT-2024-001",
-      "Explain Raft consensus",
-      "How does IPFS work?"
+      "Check my fee dues",
+      "Check fee dues for STU-2024-002",
+      "Show course roster for CS501",
+      "Explain Raft consensus"
     ]
   },
   {
@@ -48,14 +49,14 @@ const CONSORTIUM_ROLES = [
     user: 'Dr. Rajesh Kumar',
     email: 'rajesh.kumar@academic.edu',
     color: '#4f46e5',
-    badge: 'Org 1 • Coursework & CIE',
-    description: 'Coursework instructor, attendance & CIE mark audit',
+    badge: 'Org 1 • Course Roster & CIE',
+    description: 'Coursework instructor, student roster & CIE mark audit',
     prompts: [
+      "Show course roster for CS501",
+      "Check CIE marks audit for CS501",
       "Find Dr. Rajesh Kumar",
       "Who approved CERT-2024-001?",
-      "Show student profile STU-2024-001",
-      "Explain 7-stage lifecycle workflow",
-      "Check network health"
+      "Department clearance pipeline"
     ]
   },
   {
@@ -66,13 +67,14 @@ const CONSORTIUM_ROLES = [
     user: 'Prof. K. V. Rao',
     email: 'hod.cse@academic.edu',
     color: '#0891b2',
-    badge: 'Org 1 • Department Head',
-    description: 'Department curriculum approval & DAC committee multi-sig',
+    badge: 'Org 1 • Department Head & DAC',
+    description: 'Department graduation clearance & DAC 3-member multi-sig quorum',
     prompts: [
-      "Show me the history of CERT-2024-001",
+      "Department clearance pipeline",
+      "DAC committee multi-sig quorum",
+      "Show course roster for CS501",
       "Who approved CERT-2024-001?",
-      "What is consortium governance?",
-      "Check network health"
+      "Lock grades for student STU-2024-001"
     ]
   },
   {
@@ -83,13 +85,14 @@ const CONSORTIUM_ROLES = [
     user: 'Prof. S. R. Murthy',
     email: 'controller@academic.edu',
     color: '#d97706',
-    badge: 'Org 2 • Grade Lockdown',
-    description: 'Grade registry lockdown & Merkle root transcript audit',
+    badge: 'Org 2 • Grade Lock & Audit',
+    description: 'Grade registry lockdown, Merkle root & tampering anomaly audit',
     prompts: [
+      "Lock examination grades and verify Merkle root",
+      "Run grade anomaly and tamper detection audit",
+      "Audit student grades for STU-2024-001",
       "Who approved CERT-2024-001?",
-      "What is the status of CERT-2024-001?",
-      "Explain AES encryption",
-      "Check network health"
+      "Check Cloudflare R2 backup status"
     ]
   },
   {
@@ -100,14 +103,14 @@ const CONSORTIUM_ROLES = [
     user: 'Central Administration Authority',
     email: 'admin@academic.edu',
     color: '#059669',
-    badge: 'Org 3 • Cloudflare R2 Full Access',
-    description: 'Full consortium governance & Cloudflare R2 enterprise backup storage',
+    badge: 'Org 3 • Central Governance & R2',
+    description: 'Revocation registry, bursar clearance & Cloudflare R2 backup',
     prompts: [
       "Check Cloudflare R2 backup status",
       "Get Cloudflare R2 link for CERT-2024-001",
-      "Explain Cloudflare R2 backup architecture",
-      "Show me the history of CERT-2024-001",
-      "Check network health"
+      "Audit on-chain revocation registry",
+      "Check institutional fee and library dues",
+      "Department clearance pipeline"
     ]
   }
 ];

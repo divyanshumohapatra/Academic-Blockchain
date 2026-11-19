@@ -6,6 +6,7 @@ const fraudAgent = require('./fraudAgent');
 const hfClient = require('./hfAgentClient');
 const r2 = require('../r2');
 const { ROLES } = require('../auth');
+const { handleChatMessage, detectIntent, INTENTS } = require('../intentEngine');
 
 class ChatbotAgent {
   constructor() {
@@ -99,6 +100,26 @@ class ChatbotAgent {
         intent: 'R2_STATUS',
         data: r2Health
       };
+    }
+
+    // Role-based restrictions for students querying privileged operations
+    if (role === ROLES.STUDENT && (lower.includes('lock grades') || lower.includes('lock grade') || lower.includes('submit marks') || lower.includes('enter marks') || lower.includes('revoke certificate'))) {
+      return await handleChatMessage(text, context);
+    }
+
+    // Check if message matches specialized RBAC consortium operations
+    const detectedIntent = detectIntent(text);
+    if ([
+      INTENTS.COURSE_ROSTER,
+      INTENTS.CIE_AUDIT,
+      INTENTS.DEPARTMENT_AUDIT,
+      INTENTS.DAC_QUORUM,
+      INTENTS.EXAM_LOCKDOWN,
+      INTENTS.GRADE_ANOMALY,
+      INTENTS.INSTITUTIONAL_DUES,
+      INTENTS.REVOCATION_AUDIT
+    ].includes(detectedIntent)) {
+      return await handleChatMessage(text, context);
     }
 
     // 1. Network Health & Topology Query
