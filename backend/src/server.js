@@ -209,10 +209,6 @@ app.patch('/api/students/:id/status', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 app.get('/api/students/:id/eligibility', async (req, res) => {
   try {
@@ -1074,7 +1070,6 @@ app.post('/api/requests', async (req, res) => {
       prerequisitesVerified: evaluation.eligible,
       enrichedFromSIS: true,
       result
-    });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
