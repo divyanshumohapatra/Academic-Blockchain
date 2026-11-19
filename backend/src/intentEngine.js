@@ -5,9 +5,10 @@
  * Academic Blockchain PBL — Conversational NLP & Intent Engine
  * 
  * Module: intentEngine.js
- * Description: Rule-based intent detection, ID & entity extraction, Fabric chaincode &
- * SIS data resolution, domain knowledge reasoning, and natural language reply generation.
- * Works 100% reliably standalone without requiring external LLM models or API keys.
+ * Description: Rule-based intent detection, Person/Name & ID entity extraction,
+ * Fabric chaincode & SIS data resolution, domain knowledge reasoning, and natural
+ * language reply generation. Works 100% reliably standalone without requiring
+ * external LLM models or API keys.
  * ============================================================================
  */
 
@@ -303,12 +304,80 @@ async function fetchStudentInfo(studentId) {
 }
 
 // ============================================================================
-// 2. ID & ENTITY EXTRACTION ENGINE
+// 2. PERSON SEARCH ENGINE (STUDENT & FACULTY LOOKUP BY NAME)
+// ============================================================================
+
+/**
+ * Searches the University SIS & Consortium for students or faculty matching a name query.
+ */
+function findPersonInSystem(text) {
+  if (!text || typeof text !== 'string') return null;
+  const clean = text.toLowerCase().trim();
+
+  if (!sisDatabase) return null;
+
+  const students = sisDatabase.getAllSISStudents ? sisDatabase.getAllSISStudents() : [];
+  const faculties = sisDatabase.getAllFaculties ? sisDatabase.getAllFaculties() : [];
+
+  // 1. Exact full student name match
+  for (const s of students) {
+    if (clean.includes(s.name.toLowerCase())) {
+      return { type: 'student', data: s };
+    }
+  }
+
+  // 2. Exact full faculty name match
+  for (const f of faculties) {
+    if (clean.includes(f.name.toLowerCase())) {
+      return { type: 'faculty', data: f };
+    }
+  }
+
+  // 3. Match explicit Student ID inside text
+  for (const s of students) {
+    const idLower = s.studentId.toLowerCase();
+    const idNum = idLower.replace('stu-', '');
+    if (clean.includes(idLower) || (idNum.length >= 3 && clean.includes(idNum))) {
+      return { type: 'student', data: s };
+    }
+  }
+
+  // 4. Token-based matching (matches specific name words like "Divyanshu", "Mohapatra", "Prabir", "Alice")
+  const stopWords = new Set([
+    'can', 'you', 'find', 'show', 'student', 'person', 'profile', 'status',
+    'about', 'tell', 'check', 'who', 'the', 'is', 'for', 'me', 'please', 'details',
+    'look', 'up', 'search', 'get', 'give', 'information', 'info', 'record', 'does', 'exist', 'roll', 'number', 'no', 'of', 'in', 'at'
+  ]);
+  const tokens = clean.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length >= 3 && !stopWords.has(t));
+
+  for (const s of students) {
+    const sTokens = s.name.toLowerCase().split(/\s+/);
+    for (const token of tokens) {
+      if (sTokens.includes(token)) {
+        return { type: 'student', data: s };
+      }
+    }
+  }
+
+  for (const f of faculties) {
+    const fTokens = f.name.toLowerCase().replace('dr.', '').trim().split(/\s+/);
+    for (const token of tokens) {
+      if (fTokens.includes(token)) {
+        return { type: 'faculty', data: f };
+      }
+    }
+  }
+
+  return null;
+}
+
+// ============================================================================
+// 3. ID & ENTITY EXTRACTION ENGINE
 // ============================================================================
 
 function extractEntities(text) {
   if (!text || typeof text !== 'string') {
-    return { certId: null, studentId: null, docHash: null, isHealth: false };
+    return { certId: null, studentId: null, personMatch: null, searchedName: null, docHash: null, isHealth: false };
   }
 
   const cleanText = text.trim();
@@ -332,21 +401,19 @@ function extractEntities(text) {
     }
   }
 
-  // 2. Student ID extraction: STU-2024-35, student 001, roll number student STU-2024-35, roll no 2024-35
+  // 2. Student ID extraction with digits (e.g. STU-2024-35, STU-001, roll number 2024-35)
   const stuMatch = cleanText.match(/\b(?:STU|STUDENT)(?:[-_#:\s]+|\b)(\d+[A-Z0-9_-]*)\b/i);
   if (stuMatch) {
     studentId = `STU-${stuMatch[1].toUpperCase()}`;
   }
 
   if (!studentId) {
-    const rollMatch = cleanText.match(/(?:roll\s*(?:number|no|#)?|student)\s*[:=]?\s*([A-Za-z0-9_-]+)/i);
+    const rollMatch = cleanText.match(/\b(?:roll\s*(?:number|no|#)?)\s*[:=]?\s*([A-Za-z0-9_-]+)/i);
     if (rollMatch) {
       const rawRoll = rollMatch[1].toUpperCase();
       if (rawRoll.startsWith('STU-')) {
         studentId = rawRoll;
-      } else if (/^\d{4}-\d+$/.test(rawRoll)) {
-        studentId = `STU-${rawRoll}`;
-      } else if (!rawRoll.startsWith('CERT-') && !rawRoll.startsWith('REQ-')) {
+      } else if (/\d/.test(rawRoll)) {
         studentId = `STU-${rawRoll}`;
       }
     }
@@ -360,20 +427,33 @@ function extractEntities(text) {
     }
   }
 
-  // 3. Cryptographic SHA-256 Digest
+  // 3. Person / Name Matching
+  const personMatch = findPersonInSystem(cleanText);
+  if (personMatch && personMatch.type === 'student' && !studentId) {
+    studentId = personMatch.data.studentId;
+  }
+
+  // Check if a name search was attempted but not found
+  let searchedName = null;
+  const nameSearchMatch = cleanText.match(/\b(?:find|search|who\s+is|tell\s+me\s+about|look\s+up|check|profile\s+of)\s+(?:student|person|faculty|prof|professor)?\s*([A-Z][a-zA-Z\s]+)/i);
+  if (nameSearchMatch && !personMatch && !certId && !studentId) {
+    searchedName = nameSearchMatch[1].trim();
+  }
+
+  // 4. Cryptographic SHA-256 Digest
   const hashMatch = cleanText.match(/\b[a-fA-F0-9]{64}\b/);
   if (hashMatch) {
     docHash = hashMatch[0];
   }
 
-  // 4. Health Query check
+  // 5. Health Query check
   const isHealth = /\b(health|network\s+status|blockchain\s+status|peers?\s+status|nodes?\s+online|is\s+blockchain\s+up|orderer\s+status)\b/i.test(cleanText);
 
-  return { certId, studentId, docHash, isHealth };
+  return { certId, studentId, personMatch, searchedName, docHash, isHealth };
 }
 
 // ============================================================================
-// 3. INTENT DETECTION
+// 4. INTENT DETECTION
 // ============================================================================
 
 const INTENTS = {
@@ -381,6 +461,7 @@ const INTENTS = {
   HISTORY_LOOKUP: 'HISTORY_LOOKUP',
   WHO_APPROVED: 'WHO_APPROVED',
   STUDENT_LOOKUP: 'STUDENT_LOOKUP',
+  FACULTY_LOOKUP: 'FACULTY_LOOKUP',
   NETWORK_HEALTH: 'NETWORK_HEALTH',
   HASH_VERIFY: 'HASH_VERIFY',
   GENERAL_QA: 'GENERAL_QA',
@@ -400,7 +481,7 @@ function detectIntent(text, entities = null) {
   const isHelpQuery = /^(hi|hello|hey|greetings|help|\?|what can you do|how to use|commands|menu)\b/i.test(lower) ||
                       /\b(what can you do|how do i use|how does this work|give me help|list commands|supported questions|capabilities)\b/i.test(lower);
 
-  const hasTarget = Boolean(ents.certId || ents.studentId || ents.docHash || ents.isHealth);
+  const hasTarget = Boolean(ents.certId || ents.studentId || ents.personMatch || ents.searchedName || ents.docHash || ents.isHealth);
 
   if (isHelpQuery && !hasTarget) {
     return INTENTS.GENERAL_HELP;
@@ -442,8 +523,13 @@ function detectIntent(text, entities = null) {
     }
   }
 
-  // Student specific queries
-  if (ents.studentId && !ents.certId) {
+  // Faculty specific queries
+  if (ents.personMatch && ents.personMatch.type === 'faculty') {
+    return INTENTS.FACULTY_LOOKUP;
+  }
+
+  // Student specific queries (by roll number, ID, or name)
+  if ((ents.studentId || ents.searchedName || (ents.personMatch && ents.personMatch.type === 'student')) && !ents.certId) {
     return INTENTS.STUDENT_LOOKUP;
   }
 
@@ -472,7 +558,7 @@ function detectIntent(text, entities = null) {
 }
 
 // ============================================================================
-// 4. DOMAIN KNOWLEDGE ENGINE (INSTANT & ACCURATE BLOCKCHAIN REASONING)
+// 5. DOMAIN KNOWLEDGE ENGINE
 // ============================================================================
 
 function answerDomainQuestion(text) {
@@ -557,7 +643,9 @@ function answerDomainQuestion(text) {
   return "### 🎓 Academic Blockchain Consortium Assistant\n\n" +
          "I am your ledger-aware intelligence assistant connected directly to **Hyperledger Fabric 2.5** and **IPFS**.\n\n" +
          "Here is what you can ask me:\n" +
-         "• **Student Status**: `status of this roll number student STU-2024-35`\n" +
+         "• **Student by Name**: `Can you find student Divyanshu Mohapatra?` or `Tell me about Alice Johnson`\n" +
+         "• **Student by Roll Number**: `status of this roll number student STU-2024-35`\n" +
+         "• **Faculty Search**: `Find Dr. Rajesh Kumar` or `Who is Dr. Sunita Rao?`\n" +
          "• **Certificate Verification**: `What's the status of CERT-101?`\n" +
          "• **Multi-Org Approvers**: `Who approved CERT-101?`\n" +
          "• **Audit Trail**: `Show me the history of CERT-101`\n" +
@@ -565,7 +653,7 @@ function answerDomainQuestion(text) {
 }
 
 // ============================================================================
-// 5. NATURAL LANGUAGE GENERATION (NLG)
+// 6. NATURAL LANGUAGE GENERATION (NLG)
 // ============================================================================
 
 function formatTime(isoStr) {
@@ -624,20 +712,35 @@ function formatStudentReply(studentData) {
     reqSection;
 }
 
+function formatFacultyReply(faculty) {
+  const f = faculty;
+  return `### 👨‍🏫 Faculty Dossier: ${f.name}\n\n` +
+    `• **Faculty ID**: \`${f.faculty_id || 'FAC-ORG1'}\`\n` +
+    `• **Name**: ${f.name}\n` +
+    `• **Department**: ${f.department}\n` +
+    `• **Designation**: ${f.designation}\n` +
+    `• **Official Email**: ${f.email}\n` +
+    `• **Assigned Academic Course**: **${f.course_id}** — *${f.course_name}*\n` +
+    `• **Consortium Role**: Course Instructor & Initial Multi-Sig Course Endorsement Authority (Org 1)\n\n` +
+    `*Authorized to review student coursework, submit CIE marks, and sign off on Stage 2 (FACULTY_APPROVED).*`;
+}
+
 /**
  * Generates natural language replies
  */
 function generateReply(intent, entities, data, extra = null) {
-  const { certId, studentId, docHash } = entities;
+  const { certId, studentId, searchedName, docHash } = entities;
 
   // 1. GENERAL_HELP
   if (intent === INTENTS.GENERAL_HELP) {
     return {
       reply: "👋 Hello! I am your Academic Blockchain Assistant. You can ask me:\n" +
              "1. Status Check — \"What's the status of CERT-101?\"\n" +
-             "2. History Lookup — \"Show me the history of CERT-101\"\n" +
-             "3. Approver Lookup — \"Who approved CERT-101?\"\n" +
-             "4. General Help — \"What can you do?\"",
+             "2. Person / Student Search — \"Can you find student Divyanshu Mohapatra?\"\n" +
+             "3. Student by Roll No — \"status of this roll number student STU-2024-35\"\n" +
+             "4. History Lookup — \"Show me the history of CERT-101\"\n" +
+             "5. Approver Lookup — \"Who approved CERT-101?\"\n" +
+             "6. General Help — \"What can you do?\"",
       intent: INTENTS.GENERAL_HELP,
       data: null
     };
@@ -659,11 +762,28 @@ function generateReply(intent, entities, data, extra = null) {
     return { reply, intent: INTENTS.NETWORK_HEALTH, data: { network: nw, ipfs } };
   }
 
-  // 3. STUDENT_LOOKUP
-  if (intent === INTENTS.STUDENT_LOOKUP) {
+  // 3. FACULTY_LOOKUP
+  if (intent === INTENTS.FACULTY_LOOKUP) {
     if (!data) {
       return {
-        reply: `⚠️ Student "${studentId}" was not found in the University SIS database or on the Fabric ledger. Please check the roll number.`,
+        reply: `⚠️ Faculty record could not be found.`,
+        intent: INTENTS.FACULTY_LOOKUP,
+        data: null
+      };
+    }
+    return {
+      reply: formatFacultyReply(data),
+      intent: INTENTS.FACULTY_LOOKUP,
+      data
+    };
+  }
+
+  // 4. STUDENT_LOOKUP
+  if (intent === INTENTS.STUDENT_LOOKUP) {
+    if (!data) {
+      const targetQuery = searchedName || studentId || 'the requested student';
+      return {
+        reply: `⚠️ Student "${targetQuery}" was not found in the University SIS database or on the Fabric ledger. Please check the spelling or provide their Roll Number (e.g. STU-2020-013).`,
         intent: INTENTS.STUDENT_LOOKUP,
         data: null
       };
@@ -675,7 +795,7 @@ function generateReply(intent, entities, data, extra = null) {
     };
   }
 
-  // 4. HASH_VERIFY
+  // 5. HASH_VERIFY
   if (intent === INTENTS.HASH_VERIFY) {
     if (!data) {
       return {
@@ -696,7 +816,7 @@ function generateReply(intent, entities, data, extra = null) {
     };
   }
 
-  // 5. GENERAL_QA
+  // 6. GENERAL_QA
   if (intent === INTENTS.GENERAL_QA) {
     const ans = answerDomainQuestion(extra?.rawMessage || '');
     return {
@@ -724,14 +844,14 @@ function generateReply(intent, entities, data, extra = null) {
     };
   }
 
-  // 6. STATUS_CHECK
+  // 7. STATUS_CHECK
   if (intent === INTENTS.STATUS_CHECK) {
     const txShort = data.txId ? `${data.txId.substring(0, 16)}...` : 'confirmed';
     const reply = `${data.certId} is currently at ${data.status} stage, confirmed on-chain (tx: ${txShort}).`;
     return { reply, intent: INTENTS.STATUS_CHECK, data };
   }
 
-  // 7. WHO_APPROVED
+  // 8. WHO_APPROVED
   if (intent === INTENTS.WHO_APPROVED) {
     const history = data.history || [];
     if (history.length === 0) {
@@ -762,7 +882,7 @@ function generateReply(intent, entities, data, extra = null) {
     return { reply, intent: INTENTS.WHO_APPROVED, data };
   }
 
-  // 8. HISTORY_LOOKUP
+  // 9. HISTORY_LOOKUP
   if (intent === INTENTS.HISTORY_LOOKUP) {
     const history = data.history || [];
     if (history.length === 0) {
@@ -791,7 +911,7 @@ function generateReply(intent, entities, data, extra = null) {
 }
 
 // ============================================================================
-// 6. MASTER CHAT PROCESSOR PIPELINE
+// 7. MASTER CHAT PROCESSOR PIPELINE
 // ============================================================================
 
 async function handleChatMessage(message) {
@@ -823,18 +943,28 @@ async function handleChatMessage(message) {
     return generateReply(intent, entities, cert);
   }
 
-  // 3. Student Profile / Roll Number Query
+  // 3. Faculty Lookup
+  if (intent === INTENTS.FACULTY_LOOKUP) {
+    return generateReply(intent, entities, entities.personMatch?.data);
+  }
+
+  // 4. Student Profile / Person Query (By Name or Roll Number)
   if (intent === INTENTS.STUDENT_LOOKUP) {
-    const studentData = await fetchStudentInfo(entities.studentId);
+    let studentData = null;
+    if (entities.studentId) {
+      studentData = await fetchStudentInfo(entities.studentId);
+    } else if (entities.personMatch && entities.personMatch.type === 'student') {
+      studentData = await fetchStudentInfo(entities.personMatch.data.studentId);
+    }
     return generateReply(intent, entities, studentData);
   }
 
-  // 4. General Q&A / Knowledge Inquiry (Reliable local deterministic reasoning)
+  // 5. General Q&A / Knowledge Inquiry
   if (intent === INTENTS.GENERAL_QA) {
     return generateReply(intent, entities, null, { rawMessage: message });
   }
 
-  // 5. Certificate / Request ID Ledger Fetch
+  // 6. Certificate / Request ID Ledger Fetch
   let ledgerData = null;
   if (entities.certId) {
     ledgerData = await fetchCertHistory(entities.certId);
@@ -846,6 +976,7 @@ async function handleChatMessage(message) {
 module.exports = {
   CANONICAL_STAGES,
   INTENTS,
+  findPersonInSystem,
   extractEntities,
   detectIntent,
   fetchCertHistory,
