@@ -39,7 +39,6 @@ services:
       - BACKEND_PORT=4000
     volumes:
       - ../frontend/server.js:/app/server.js
-      - ../frontend/dist:/app/dist
       - ../frontend/public:/app/public
     ports:
       - "3000:3000"
