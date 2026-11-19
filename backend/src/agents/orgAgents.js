@@ -336,11 +336,57 @@ class AdminFinalizeAgent {
   }
 }
 
+/**
+ * Contributor 1.2 & 1.3: Org 1 Autonomous Department Verification Pipeline
+ * Sequentially executes Stages 1–3: Faculty -> HOD -> DAC under Org1MSP
+ */
+async function runOrg1DepartmentPipeline(requestId, details = {}) {
+  const facultyAgent = new FacultyAgent();
+  const hodAgent = new HODAgent();
+  const dacAgent = new DACAgent();
+
+  const auditLogs = [];
+
+  // Stage 1: Faculty Approval
+  console.log(`[Org1 Department Pipeline] Stage 1/3: Running Faculty Agent on ${requestId}...`);
+  const facultyRes = await facultyAgent.auditAndApprove(requestId, details);
+  auditLogs.push(facultyRes);
+  if (!facultyRes.success) {
+    return { success: false, failedAt: 'FACULTY_APPROVED', auditLogs, error: facultyRes.rationale };
+  }
+
+  // Stage 2: HOD Approval
+  console.log(`[Org1 Department Pipeline] Stage 2/3: Running HOD Agent on ${requestId}...`);
+  const hodRes = await hodAgent.auditAndApprove(requestId, details);
+  auditLogs.push(hodRes);
+  if (!hodRes.success) {
+    return { success: false, failedAt: 'HOD_APPROVED', auditLogs, error: hodRes.rationale };
+  }
+
+  // Stage 3: DAC Approval
+  console.log(`[Org1 Department Pipeline] Stage 3/3: Running DAC Agent on ${requestId}...`);
+  const dacRes = await dacAgent.auditAndApprove(requestId, details);
+  auditLogs.push(dacRes);
+  if (!dacRes.success) {
+    return { success: false, failedAt: 'DAC_APPROVED', auditLogs, error: dacRes.rationale };
+  }
+
+  return {
+    success: true,
+    requestId,
+    department: 'Org 1 Academic Department (Org1MSP)',
+    currentStage: 'DAC_APPROVED',
+    completedStages: ['FACULTY_APPROVED', 'HOD_APPROVED', 'DAC_APPROVED'],
+    auditLogs
+  };
+}
+
 module.exports = {
   FacultyAgent,
   HODAgent,
   DACAgent,
   ExamLockAgent,
   DeanAgent,
-  AdminFinalizeAgent
+  AdminFinalizeAgent,
+  runOrg1DepartmentPipeline
 };

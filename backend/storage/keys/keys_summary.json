@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-11-18T19:41:30.704Z",
+  "consortium": "Academic Blockchain (Org1, Org2, Org3)",
+  "curve": "ECDSA prime256v1 / secp256r1",
+  "keys": {
+    "org1Academic": {
+      "organization": "Org1 - University / Academic Department",
+      "mspId": "Org1MSP",
+      "adminPrivateKey": "keys/org1_academic/org1_admin_private_key.pem",
+      "adminCert": "keys/org1_academic/org1_admin_cert.pem",
+      "user1PrivateKey": "keys/org1_academic/org1_user1_private_key.pem",
+      "user1Cert": "keys/org1_academic/org1_user1_cert.pem",
+      "caCert": "keys/org1_academic/org1_ca_cert.pem",
+      "purpose": "Endorsement of student registration, stage 1-3 academic approvals (Faculty, HOD, DAC)"
+    },
+    "org2Examination": {
+      "organization": "Org2 - Examination Board",
+      "mspId": "Org2MSP",
+      "adminPrivateKey": "keys/org2_examination/org2_admin_private_key.pem",
+      "adminCert": "keys/org2_examination/org2_admin_cert.pem",
+      "purpose": "Stage 4 Exam Grade Lockdown and Cryptographic Merkle Digest Endorsement"
+    },
+    "org3Governance": {
+      "organization": "Org3 - Administration & Governance",
+      "mspId": "Org3MSP",
+      "adminPrivateKey": "keys/org3_governance/org3_admin_private_key.pem",
+      "adminCert": "keys/org3_governance/org3_admin_cert.pem",
+      "purpose": "Stage 5-6 Dean Sanction, Clearance Authorization, Certificate Issuance and Revocation"
+    },
+    "studentDemo": {
+      "entity": "Student Identity (Decentralized PKI / Contributor 1.1)",
+      "studentId": "STU-1001",
+      "privateKey": "keys/student_demo/student_demo_private_key.pem",
+      "publicKey": "keys/student_demo/student_demo_public_key.pem",
+      "publicKeyHex": "3059301306072a8648ce3d020106082a8648ce3d0301070342000433f0d7c0d819deb8510c629f25c27b87d395d39a4721099d30a8b18386d3206a903aea15f027d1aa91fedee5ea434fba4a7a4bce30ba62341920d4c735f38ad4",
+      "sha256Fingerprint": "4750b1e1d52503d25f6c1d731a4f02b5a164c00f81770edf947fb594105c347e",
+      "purpose": "Client-side digital signing of RequestCertificate payloads to guarantee non-repudiation and prevent identity spoofing."
+    }
+  }
+}

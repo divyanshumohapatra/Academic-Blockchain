@@ -1,6 +1,13 @@
 'use strict';
 
-const { Contract } = require('fabric-contract-api');
+const crypto = require('crypto');
+
+let Contract;
+try {
+  Contract = require('fabric-contract-api').Contract;
+} catch (e) {
+  Contract = class MockContract {};
+}
 
 class AcademicContract extends Contract {
 
@@ -16,7 +23,136 @@ class AcademicContract extends Contract {
     } catch (e) {
       // fallback
     }
-    return '2024-01-01T00:00:00.000Z';
+    return new Date().toISOString();
+  }
+
+  /**
+   * Contributor 1.1: Org1MSP Access Control Guard
+   * Enforces that student onboarding and profile lifecycle management
+   * are executed only by Org1MSP (University Academic Department).
+   */
+  _validateOrg1MSP(ctx) {
+    try {
+      if (ctx.clientIdentity && typeof ctx.clientIdentity.getMSPID === 'function') {
+        const mspId = ctx.clientIdentity.getMSPID();
+        if (mspId && mspId !== 'Org1MSP') {
+          throw new Error(`Access Denied: Only Org1MSP (Academic Department) is authorized to perform this operation. Invoking MSP: ${mspId}`);
+        }
+      }
+    } catch (err) {
+      if (err.message && err.message.startsWith('Access Denied')) {
+        throw err;
+      }
+      // If getMSPID is unavailable in raw test stubs or peer CLI mock, log and proceed gracefully
+    }
+  }
+
+  /**
+   * Contributor 1.1 Enhancement: Academic Standing & Latin Honors Classification Engine
+   */
+  _computeAcademicStanding(cgpa, attendance, backlogs) {
+    const numCgpa = Number(cgpa) || 0;
+    const numAtt = Number(attendance) || 0;
+    const numBacklogs = Number(backlogs) || 0;
+
+    if (numBacklogs > 0 || numCgpa < 5.0) {
+      return { standing: 'ACADEMIC_PROBATION', honors: 'NONE' };
+    }
+
+    let honors = 'NONE';
+    if (numCgpa >= 9.5 && numAtt >= 85.0) {
+      honors = 'SUMMA_CUM_LAUDE';
+    } else if (numCgpa >= 9.0) {
+      honors = 'MAGNA_CUM_LAUDE';
+    } else if (numCgpa >= 8.5) {
+      honors = numAtt >= 90.0 ? 'DEAN_HONOR_ROLL' : 'CUM_LAUDE';
+    }
+
+    return { standing: 'GOOD_STANDING', honors };
+  }
+
+  /**
+   * Contributor 1.1 Enhancement: Cryptographic Digital Signature Verification
+   * Guarantees student non-repudiation and prevents request spoofing.
+   */
+  _verifySignature(publicKeyPem, dataString, signatureBase64) {
+    try {
+      if (!publicKeyPem || !signatureBase64) return false;
+      const verifier = crypto.createVerify('SHA256');
+      verifier.update(dataString);
+      verifier.end();
+      return verifier.verify(publicKeyPem, Buffer.from(signatureBase64, 'base64'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Contributor 1.1 Enhancement: Deterministic Transcript Digest
+   * Anchors cryptographic SHA-256 fingerprint of student transcript snapshot.
+   */
+  _computeTranscriptDigest(studentId, cgpa, totalCredits, attendance, backlogs, courses) {
+    const sortedCourses = Array.isArray(courses) ? [...courses].sort().join(',') : '';
+    return crypto.createHash('sha256')
+      .update(`${studentId}:${cgpa}:${totalCredits}:${attendance}:${backlogs}:${sortedCourses}`)
+      .digest('hex');
+  }
+
+  /**
+   * Contributor 1.1: Rich Schema Validation for Student Identity
+   */
+  _validateStudentSchema(studentId, name, email, department, enrollmentYear) {
+    if (!studentId || typeof studentId !== 'string') {
+      throw new Error('studentId is required and must be a valid string');
+    }
+    const studentIdRegex = /^[A-Za-z0-9_-]{3,32}$/;
+    if (!studentIdRegex.test(studentId.trim())) {
+      throw new Error(`Invalid studentId format: '${studentId}'. Must be 3-32 alphanumeric characters, dashes, or underscores`);
+    }
+
+    if (!name || typeof name !== 'string') {
+      throw new Error('name is required and must be a non-empty string');
+    }
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      throw new Error('name must be between 2 and 100 characters');
+    }
+
+    if (!email || typeof email !== 'string') {
+      throw new Error('email is required and must be a string');
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      throw new Error(`Invalid email format: '${email}'`);
+    }
+
+    if (enrollmentYear !== undefined && enrollmentYear !== null && enrollmentYear !== '') {
+      const year = Number(enrollmentYear);
+      if (isNaN(year) || year < 1990 || year > 2100) {
+        throw new Error(`Invalid enrollmentYear: '${enrollmentYear}'. Must be a 4-digit year between 1990 and 2100`);
+      }
+    }
+  }
+
+  /**
+   * Contributor 1.1: Rich Schema Validation for Certificate Request
+   */
+  _validateRequestSchema(requestId, studentId, certType) {
+    if (!requestId || typeof requestId !== 'string') {
+      throw new Error('requestId is required and must be a string');
+    }
+    const reqIdRegex = /^[A-Za-z0-9_-]{3,64}$/;
+    if (!reqIdRegex.test(requestId.trim())) {
+      throw new Error(`Invalid requestId format: '${requestId}'. Must be 3-64 alphanumeric characters, dashes, or underscores`);
+    }
+
+    if (!studentId || typeof studentId !== 'string') {
+      throw new Error('studentId is required and must be a string');
+    }
+
+    if (!certType || typeof certType !== 'string' || certType.trim().length < 3) {
+      throw new Error('certType is required and must be at least 3 characters');
+    }
   }
 
   async initLedger(ctx) {
@@ -26,7 +162,7 @@ class AcademicContract extends Contract {
       docType: 'networkInit',
       initializedAt: timestamp,
       consortium: 'AcademicConsortium',
-      version: '1.0.0'
+      version: '1.1.0'
     };
     await ctx.stub.putState('NETWORK_INIT', Buffer.from(JSON.stringify(initMarker)));
     console.info('============= END : Initialize Academic Ledger ===========');
@@ -34,29 +170,205 @@ class AcademicContract extends Contract {
 
   // ==========================================
   // MODULE 1: Student Registration & Profile
+  // Contributor 1.1: Academic Chaincode Lead
   // ==========================================
 
-  async RegisterStudent(ctx, studentId, name, email, department, enrollmentYear) {
+  /**
+   * Upgraded RegisterStudent with rich schema validation,
+   * Org1MSP client identity access control, and student identity lifecycle management.
+   */
+  async RegisterStudent(ctx, studentId, name, email, department, enrollmentYear, profileJson) {
     console.info(`RegisterStudent: ${studentId}`);
-    if (!studentId || !name || !email) {
-      throw new Error('studentId, name, and email are required');
+    
+    // 1. Enforce Org1MSP authorization
+    this._validateOrg1MSP(ctx);
+
+    // 2. Validate input schema
+    this._validateStudentSchema(studentId, name, email, department, enrollmentYear);
+
+    const cleanStudentId = studentId.trim();
+    const exists = await this.studentExists(ctx, cleanStudentId);
+    if (exists) {
+      throw new Error(`Student with ID ${cleanStudentId} already exists`);
     }
 
-    const exists = await this.studentExists(ctx, studentId);
-    if (exists) {
-      throw new Error(`Student with ID ${studentId} already exists`);
+    let parsedProfile = {};
+    if (profileJson) {
+      try {
+        parsedProfile = typeof profileJson === 'string' ? JSON.parse(profileJson) : profileJson;
+      } catch (e) {
+        parsedProfile = {};
+      }
     }
 
     const timestamp = this._getTxTimestamp(ctx);
+    let callerMsp = 'Org1MSP';
+    try {
+      if (ctx.clientIdentity && typeof ctx.clientIdentity.getMSPID === 'function') {
+        callerMsp = ctx.clientIdentity.getMSPID() || 'Org1MSP';
+      }
+    } catch (e) {}
+
+    // Extract academic metrics with robust defaults
+    const cgpa = parsedProfile.cgpa !== undefined ? Number(parsedProfile.cgpa) : 8.5;
+    const totalCredits = parsedProfile.totalCredits !== undefined ? Number(parsedProfile.totalCredits) : 160;
+    const requiredCredits = parsedProfile.requiredCredits !== undefined ? Number(parsedProfile.requiredCredits) : 160;
+    const attendance = parsedProfile.attendance !== undefined ? Number(parsedProfile.attendance) : 88.0;
+    const backlogs = parsedProfile.backlogs !== undefined ? Number(parsedProfile.backlogs) : 0;
+    const completedCourses = Array.isArray(parsedProfile.completedCourses) 
+      ? parsedProfile.completedCourses 
+      : ['CS101', 'CS102', 'CS201', 'CS202'];
+
+    // Contributor 1.1 Enhancement: Academic Standing & Latin Honors Classification
+    const standingEval = this._computeAcademicStanding(cgpa, attendance, backlogs);
+    const publicKeyPem = parsedProfile.publicKeyPem || parsedProfile.publicKey || null;
+
     const student = {
       docType: 'student',
-      studentId,
-      name,
-      email,
-      department: department || 'General',
-      enrollmentYear: enrollmentYear || timestamp.substring(0, 4),
-      registeredAt: timestamp
+      studentId: cleanStudentId,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      department: (department || 'Computer Science & Engineering').trim(),
+      enrollmentYear: String(enrollmentYear || timestamp.substring(0, 4)).trim(),
+      status: 'ACTIVE', // Lifecycle: ACTIVE, SUSPENDED, GRADUATED, WITHDRAWN
+      publicKeyPem,
+      academicRecord: {
+        cgpa,
+        totalCredits,
+        requiredCredits,
+        attendance,
+        backlogs,
+        completedCourses,
+        prerequisitesMet: attendance >= 75.0 && cgpa >= 5.0 && backlogs === 0 && totalCredits >= requiredCredits,
+        academicStanding: standingEval.standing,
+        honors: standingEval.honors
+      },
+      registeredBy: callerMsp,
+      registeredAt: timestamp,
+      updatedAt: timestamp,
+      statusHistory: [
+        {
+          status: 'ACTIVE',
+          updatedBy: callerMsp,
+          timestamp,
+          reason: 'Initial student registration and profile matriculation'
+        }
+      ]
     };
+
+    await ctx.stub.putState(`STUDENT_${cleanStudentId}`, Buffer.from(JSON.stringify(student)));
+    return JSON.stringify(student);
+  }
+
+  /**
+   * Update student academic record (CGPA, credits, attendance, completed courses, backlogs)
+   * Protected: Org1MSP only
+   */
+  async UpdateStudentAcademicRecord(ctx, studentId, recordJson) {
+    console.info(`UpdateStudentAcademicRecord: ${studentId}`);
+    this._validateOrg1MSP(ctx);
+
+    const studentBytes = await ctx.stub.getState(`STUDENT_${studentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      throw new Error(`Student ${studentId} does not exist`);
+    }
+
+    const student = JSON.parse(studentBytes.toString());
+    const updates = typeof recordJson === 'string' ? JSON.parse(recordJson) : recordJson;
+
+    if (!student.academicRecord) {
+      student.academicRecord = {};
+    }
+
+    if (updates.cgpa !== undefined) {
+      const cgpa = Number(updates.cgpa);
+      if (isNaN(cgpa) || cgpa < 0 || cgpa > 10.0) throw new Error('cgpa must be between 0.0 and 10.0');
+      student.academicRecord.cgpa = cgpa;
+    }
+    if (updates.totalCredits !== undefined) {
+      const credits = Number(updates.totalCredits);
+      if (isNaN(credits) || credits < 0) throw new Error('totalCredits must be non-negative');
+      student.academicRecord.totalCredits = credits;
+    }
+    if (updates.requiredCredits !== undefined) {
+      student.academicRecord.requiredCredits = Number(updates.requiredCredits);
+    }
+    if (updates.attendance !== undefined) {
+      const att = Number(updates.attendance);
+      if (isNaN(att) || att < 0 || att > 100.0) throw new Error('attendance must be between 0.0 and 100.0');
+      student.academicRecord.attendance = att;
+    }
+    if (updates.backlogs !== undefined) {
+      const b = Number(updates.backlogs);
+      if (isNaN(b) || b < 0) throw new Error('backlogs must be non-negative integer');
+      student.academicRecord.backlogs = b;
+    }
+    if (Array.isArray(updates.completedCourses)) {
+      student.academicRecord.completedCourses = updates.completedCourses;
+    }
+
+    const currentRecord = student.academicRecord;
+    currentRecord.prerequisitesMet = 
+      (currentRecord.attendance || 0) >= 75.0 && 
+      (currentRecord.cgpa || 0) >= 5.0 && 
+      (currentRecord.backlogs || 0) === 0 && 
+      (currentRecord.totalCredits || 0) >= (currentRecord.requiredCredits || 0);
+
+    // Contributor 1.1 Enhancement: Recalculate standing & honors
+    const updatedEval = this._computeAcademicStanding(
+      currentRecord.cgpa,
+      currentRecord.attendance,
+      currentRecord.backlogs
+    );
+    currentRecord.academicStanding = updatedEval.standing;
+    currentRecord.honors = updatedEval.honors;
+
+    const timestamp = this._getTxTimestamp(ctx);
+    student.updatedAt = timestamp;
+
+    await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
+    return JSON.stringify(student);
+  }
+
+  /**
+   * Update student lifecycle status (ACTIVE, SUSPENDED, GRADUATED, WITHDRAWN)
+   * Protected: Org1MSP only
+   */
+  async UpdateStudentStatus(ctx, studentId, newStatus, reason) {
+    console.info(`UpdateStudentStatus: ${studentId} -> ${newStatus}`);
+    this._validateOrg1MSP(ctx);
+
+    const validStatuses = ['ACTIVE', 'SUSPENDED', 'GRADUATED', 'WITHDRAWN'];
+    if (!validStatuses.includes(newStatus)) {
+      throw new Error(`Invalid status '${newStatus}'. Allowed: ${validStatuses.join(', ')}`);
+    }
+
+    const studentBytes = await ctx.stub.getState(`STUDENT_${studentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      throw new Error(`Student ${studentId} does not exist`);
+    }
+
+    const student = JSON.parse(studentBytes.toString());
+    student.status = newStatus;
+    const timestamp = this._getTxTimestamp(ctx);
+    student.updatedAt = timestamp;
+
+    let actor = 'Org1MSP';
+    try {
+      if (ctx.clientIdentity && typeof ctx.clientIdentity.getMSPID === 'function') {
+        actor = ctx.clientIdentity.getMSPID() || 'Org1MSP';
+      }
+    } catch (e) {}
+
+    if (!Array.isArray(student.statusHistory)) {
+      student.statusHistory = [];
+    }
+    student.statusHistory.push({
+      status: newStatus,
+      updatedBy: actor,
+      timestamp,
+      reason: reason || `Status changed to ${newStatus}`
+    });
 
     await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
     return JSON.stringify(student);
@@ -75,50 +387,228 @@ class AcademicContract extends Contract {
     return studentAsBytes && studentAsBytes.length > 0;
   }
 
+  /**
+   * Verify whether a student satisfies all prerequisites for degree certificate issuance
+   */
+  async VerifyStudentEligibility(ctx, studentId, certType) {
+    console.info(`VerifyStudentEligibility: ${studentId}`);
+    const studentBytes = await ctx.stub.getState(`STUDENT_${studentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      return JSON.stringify({
+        studentId,
+        eligible: false,
+        error: `Student ${studentId} not found`
+      });
+    }
+
+    const student = JSON.parse(studentBytes.toString());
+    const record = student.academicRecord || {};
+    const attendance = record.attendance !== undefined ? record.attendance : 85.0;
+    const cgpa = record.cgpa !== undefined ? record.cgpa : 8.0;
+    const credits = record.totalCredits !== undefined ? record.totalCredits : 160;
+    const requiredCredits = record.requiredCredits !== undefined ? record.requiredCredits : 160;
+    const backlogs = record.backlogs !== undefined ? record.backlogs : 0;
+
+    const violations = [];
+    if (attendance < 75.0) violations.push(`Attendance ${attendance}% is below statutory 75.0%`);
+    if (cgpa < 5.0) violations.push(`CGPA ${cgpa} is below minimum 5.0 threshold`);
+    if (backlogs > 0) violations.push(`Active backlogs: ${backlogs}`);
+    if (credits < requiredCredits) violations.push(`Earned credits ${credits} below required ${requiredCredits}`);
+    if (student.status !== 'ACTIVE') violations.push(`Student lifecycle status is '${student.status}'`);
+
+    return JSON.stringify({
+      studentId,
+      name: student.name,
+      department: student.department,
+      status: student.status,
+      certType: certType || 'Degree Certificate',
+      eligible: violations.length === 0,
+      violations,
+      academicRecord: record
+    });
+  }
+
+  /**
+   * Contributor 1.1 Enhancement: Verify student digital signature against registered on-chain public key
+   */
+  async VerifyStudentSignature(ctx, studentId, requestId, certType, timestamp, signatureBase64) {
+    const cleanStudentId = studentId.trim();
+    const cleanReqId = requestId.trim();
+    const studentBytes = await ctx.stub.getState(`STUDENT_${cleanStudentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      return JSON.stringify({ verified: false, error: `Student ${cleanStudentId} not found` });
+    }
+    const student = JSON.parse(studentBytes.toString());
+    if (!student.publicKeyPem) {
+      return JSON.stringify({ verified: false, error: `No public key registered for student ${cleanStudentId}` });
+    }
+    const canonicalPayload = `${cleanStudentId}:${cleanReqId}:${certType}:${timestamp || ''}`;
+    const verified = this._verifySignature(student.publicKeyPem, canonicalPayload, signatureBase64);
+    return JSON.stringify({
+      studentId: cleanStudentId,
+      requestId: cleanReqId,
+      verified,
+      canonicalPayload
+    });
+  }
+
+  /**
+   * Contributor 1.1 Enhancement: Retrieve student public key and fingerprint
+   */
+  async GetStudentPublicKey(ctx, studentId) {
+    const cleanStudentId = studentId.trim();
+    const studentBytes = await ctx.stub.getState(`STUDENT_${cleanStudentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      throw new Error(`Student ${cleanStudentId} does not exist`);
+    }
+    const student = JSON.parse(studentBytes.toString());
+    return JSON.stringify({
+      studentId: cleanStudentId,
+      hasKey: Boolean(student.publicKeyPem),
+      publicKeyPem: student.publicKeyPem || null
+    });
+  }
+
   // =======================================================
   // MODULE 2: Certificate Request & 7-Stage Approval State Machine
+  // Contributor 1.1: Academic Chaincode Lead (RequestCertificate with rich schema & prerequisite verification)
   // SUBMITTED -> FACULTY_APPROVED -> HOD_APPROVED ->
   // DAC_APPROVED -> EXAM_LOCKED -> DEAN_APPROVED -> ADMIN_FINALIZED
   // =======================================================
 
   async RequestCertificate(ctx, requestId, studentId, certType, detailsJson) {
     console.info(`RequestCertificate: ${requestId} for student: ${studentId}`);
-    const studentExists = await this.studentExists(ctx, studentId);
-    if (!studentExists) {
-      throw new Error(`Student ${studentId} is not registered`);
+    
+    // 1. Rich schema validation
+    this._validateRequestSchema(requestId, studentId, certType);
+
+    const cleanReqId = requestId.trim();
+    const cleanStudentId = studentId.trim();
+
+    // 2. Student Existence & Lifecycle Verification
+    const studentBytes = await ctx.stub.getState(`STUDENT_${cleanStudentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      throw new Error(`Student ${cleanStudentId} is not registered`);
+    }
+    const student = JSON.parse(studentBytes.toString());
+
+    if (student.status && student.status !== 'ACTIVE') {
+      throw new Error(`Cannot request certificate: Student ${cleanStudentId} status is '${student.status}'. Only ACTIVE students may apply.`);
     }
 
-    const reqKey = `REQ_${requestId}`;
+    // 3. Unique Request ID check
+    const reqKey = `REQ_${cleanReqId}`;
     const existingReq = await ctx.stub.getState(reqKey);
     if (existingReq && existingReq.length > 0) {
-      throw new Error(`Request with ID ${requestId} already exists`);
+      throw new Error(`Request with ID ${cleanReqId} already exists`);
     }
 
+    // 4. Parse incoming request details
     let parsedDetails = {};
     if (detailsJson) {
       try {
-        parsedDetails = JSON.parse(detailsJson);
+        parsedDetails = typeof detailsJson === 'string' ? JSON.parse(detailsJson) : detailsJson;
       } catch (e) {
         parsedDetails = { raw: detailsJson };
       }
     }
 
+    // 5. Evaluate Prerequisite Validation Rules
+    const record = student.academicRecord || {};
+    const effectiveAttendance = parsedDetails.attendance !== undefined ? Number(parsedDetails.attendance) : (record.attendance !== undefined ? record.attendance : 88.0);
+    const effectiveCgpa = parsedDetails.cgpa !== undefined ? Number(parsedDetails.cgpa) : (record.cgpa !== undefined ? record.cgpa : 8.5);
+    const effectiveCredits = parsedDetails.totalCredits !== undefined ? Number(parsedDetails.totalCredits) : (record.totalCredits !== undefined ? record.totalCredits : 160);
+    const requiredCredits = parsedDetails.requiredCredits !== undefined ? Number(parsedDetails.requiredCredits) : (record.requiredCredits !== undefined ? record.requiredCredits : 160);
+    const effectiveBacklogs = parsedDetails.backlogs !== undefined ? Number(parsedDetails.backlogs) : (record.backlogs !== undefined ? record.backlogs : 0);
+
+    const attendancePassed = effectiveAttendance >= 75.0;
+    const cgpaPassed = effectiveCgpa >= 5.0;
+    const creditsPassed = effectiveCredits >= requiredCredits;
+    const backlogsPassed = effectiveBacklogs === 0;
+
+    const prerequisitesSatisfied = attendancePassed && cgpaPassed && creditsPassed && backlogsPassed;
+
+    // Strict validation error if statutory prerequisites violated
+    if (!attendancePassed) {
+      throw new Error(`Prerequisite validation failed: Statutory attendance must be >= 75.0% (Current: ${effectiveAttendance}%)`);
+    }
+    if (!cgpaPassed) {
+      throw new Error(`Prerequisite validation failed: CGPA must be >= 5.0 (Current: ${effectiveCgpa})`);
+    }
+    if (!backlogsPassed) {
+      throw new Error(`Prerequisite validation failed: Active backlogs must be 0 (Current: ${effectiveBacklogs})`);
+    }
+
+    // Contributor 1.1 Enhancement: Cryptographic Student Non-Repudiation Signature Check
+    let studentSignatureVerified = false;
+    if (parsedDetails.studentSignature) {
+      if (!student.publicKeyPem) {
+        throw new Error(`Cannot verify signature: Student ${cleanStudentId} does not have a registered public key on ledger`);
+      }
+      const canonicalPayload = `${cleanStudentId}:${cleanReqId}:${certType}:${parsedDetails.signatureTimestamp || ''}`;
+      const isValid = this._verifySignature(student.publicKeyPem, canonicalPayload, parsedDetails.studentSignature);
+      if (!isValid) {
+        throw new Error('Cryptographic verification failed: Student digital signature does not match registered public key');
+      }
+      studentSignatureVerified = true;
+    } else if (parsedDetails.requireSignature === true) {
+      throw new Error('Digital signature required: Certificate request must be cryptographically signed by student');
+    }
+
+    // Contributor 1.1 Enhancement: Deterministic Transcript SHA-256 Digest Anchoring
+    const transcriptDigest = this._computeTranscriptDigest(
+      cleanStudentId,
+      effectiveCgpa,
+      effectiveCredits,
+      effectiveAttendance,
+      effectiveBacklogs,
+      record.completedCourses || []
+    );
+
     const timestamp = this._getTxTimestamp(ctx);
     const certificateRequest = {
       docType: 'certificateRequest',
-      requestId,
-      studentId,
+      requestId: cleanReqId,
+      studentId: cleanStudentId,
+      studentName: student.name || parsedDetails.name || '',
+      department: student.department || parsedDetails.department || 'Computer Science & Engineering',
       certType: certType || 'Degree Certificate',
       details: parsedDetails,
+      academicSnapshot: {
+        cgpa: effectiveCgpa,
+        totalCredits: effectiveCredits,
+        requiredCredits: requiredCredits,
+        attendance: effectiveAttendance,
+        backlogs: effectiveBacklogs,
+        courses: record.completedCourses || [],
+        transcriptDigest,
+        academicStanding: record.academicStanding || 'GOOD_STANDING',
+        honors: record.honors || 'NONE'
+      },
+      digitalSignature: {
+        provided: Boolean(parsedDetails.studentSignature),
+        verified: studentSignatureVerified,
+        signatureTimestamp: parsedDetails.signatureTimestamp || null
+      },
+      prerequisitesValidation: {
+        verified: prerequisitesSatisfied,
+        criteria: {
+          attendance: { value: effectiveAttendance, min: 75.0, passed: attendancePassed },
+          cgpa: { value: effectiveCgpa, min: 5.0, passed: cgpaPassed },
+          credits: { earned: effectiveCredits, required: requiredCredits, passed: creditsPassed },
+          backlogs: { count: effectiveBacklogs, allowed: 0, passed: backlogsPassed }
+        },
+        verifiedAt: timestamp
+      },
       status: 'SUBMITTED',
       createdAt: timestamp,
       updatedAt: timestamp,
       history: [
         {
           stage: 'SUBMITTED',
-          updatedBy: studentId,
+          updatedBy: cleanStudentId,
           timestamp,
-          comments: 'Certificate request submitted by student'
+          comments: `Certificate request submitted with verified academic prerequisites (Attendance: ${effectiveAttendance}%, CGPA: ${effectiveCgpa}, Credits: ${effectiveCredits}/${requiredCredits})`
         }
       ]
     };

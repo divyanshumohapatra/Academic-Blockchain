@@ -8,12 +8,16 @@ const multer = require('multer');
 const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
 const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
 const orchestrator = require('./agents/orchestrator');
+const { runOrg1DepartmentPipeline } = require('./agents/orgAgents');
 const fraudAgent = require('./agents/fraudAgent');
 const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
+const { evaluatePrerequisites, getDegreeRequirements, calculateAcademicStanding, verifyStudentRequestSignature } = require('./rules/prerequisites');
+const { validateStudentInput, validateRequestInput } = require('./validators/schemaValidator');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -51,17 +55,93 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ==========================================
-// 2. Module 1: Student Registration
+// 2. Module 1: Student Registration & Profile Management
+// Contributor 1.1: Academic Chaincode Lead
 // ==========================================
 app.post('/api/students', async (req, res) => {
   try {
     const { studentId, name, email, department, enrollmentYear } = req.body;
-    if (!studentId || !name || !email) {
-      return res.status(400).json({ error: 'studentId, name, and email are required' });
+
+    // Rich Schema Validation
+    const validation = validateStudentInput(req.body);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        error: 'Student schema validation failed',
+        details: validation.errors
+      });
     }
 
-    const result = await invokeChaincode('RegisterStudent', [studentId, name, email, department || 'Computer Science', enrollmentYear || '2024'], 1);
-    res.status(201).json({ success: true, result });
+    // Construct enriched academic profile for on-chain identity lifecycle
+    const academicProfile = {
+      cgpa: req.body.cgpa !== undefined ? Number(req.body.cgpa) : (req.body.academicRecord?.cgpa ?? 8.5),
+      totalCredits: req.body.totalCredits !== undefined ? Number(req.body.totalCredits) : (req.body.academicRecord?.totalCredits ?? 160),
+      requiredCredits: req.body.requiredCredits !== undefined ? Number(req.body.requiredCredits) : (req.body.academicRecord?.requiredCredits ?? 160),
+      attendance: req.body.attendance !== undefined ? Number(req.body.attendance) : (req.body.academicRecord?.attendance ?? 88.0),
+      backlogs: req.body.backlogs !== undefined ? Number(req.body.backlogs) : (req.body.academicRecord?.backlogs ?? 0),
+      completedCourses: req.body.completedCourses || req.body.academicRecord?.completedCourses || ['CS101', 'CS102', 'CS201', 'CS202'],
+      prerequisitesMet: req.body.prerequisitesMet !== undefined ? Boolean(req.body.prerequisitesMet) : true
+    };
+
+    if (req.body.publicKeyPem || req.body.publicKey) {
+      academicProfile.publicKeyPem = req.body.publicKeyPem || req.body.publicKey;
+    }
+
+    const result = await invokeChaincode('RegisterStudent', [
+      studentId.trim(),
+      name.trim(),
+      email.trim(),
+      department || 'Computer Science & Engineering',
+      enrollmentYear || '2024',
+      JSON.stringify(academicProfile)
+    ], 1); // Org 1: Academic Department
+
+    res.status(201).json({ success: true, studentId: studentId.trim(), result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/students/:id/academic-record', async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const result = await invokeChaincode('UpdateStudentAcademicRecord', [
+      studentId,
+      JSON.stringify(req.body)
+    ], 1); // Org 1
+    res.json({ success: true, studentId, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/students/:id/status', async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const { status, reason } = req.body;
+    if (!status) {
+      return res.status(400).json({ error: 'status is required (ACTIVE, SUSPENDED, GRADUATED, WITHDRAWN)' });
+    }
+    const result = await invokeChaincode('UpdateStudentStatus', [
+      studentId,
+      status,
+      reason || 'Status updated by academic administrator'
+    ], 1); // Org 1
+    res.json({ success: true, studentId, status, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/students/:id/eligibility', async (req, res) => {
+  try {
+    const studentBytes = await queryChaincode('GetStudent', [req.params.id]);
+    if (!studentBytes) {
+      return res.status(404).json({ error: `Student ${req.params.id} not found` });
+    }
+    const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+    const certType = req.query.certType || 'Bachelor of Technology in CSE';
+    const evaluation = evaluatePrerequisites(studentObj, certType, req.query);
+    res.json({ studentId: req.params.id, certType, ...evaluation });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -86,13 +166,154 @@ app.get('/api/students', async (req, res) => {
 });
 
 // ==========================================
-// 3. Module 2: Certificate Request & Approval Workflow
+// Contributor 1.1: Student Cryptographic Keypair & Digital Signature Services
 // ==========================================
+app.post('/api/students/generate-keypair', (req, res) => {
+  try {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+      namedCurve: 'prime256v1',
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+    });
+
+    const pubKeyDer = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' });
+    const pubKeyHex = pubKeyDer.toString('hex');
+    const sha256Fingerprint = crypto.createHash('sha256').update(pubKeyDer).digest('hex');
+
+    res.json({
+      curve: 'ECDSA prime256v1 (NIST P-256)',
+      publicKeyPem: publicKey,
+      privateKeyPem: privateKey,
+      publicKeyHex: pubKeyHex,
+      sha256Fingerprint
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/students/sign-payload', (req, res) => {
+  try {
+    const { privateKeyPem, studentId, requestId, certType, timestamp } = req.body;
+    if (!privateKeyPem || !studentId || !requestId || !certType) {
+      return res.status(400).json({ error: 'privateKeyPem, studentId, requestId, and certType are required' });
+    }
+
+    const canonicalPayload = `${String(studentId).trim()}:${String(requestId).trim()}:${String(certType).trim()}:${timestamp || ''}`;
+    const signer = crypto.createSign('SHA256');
+    signer.update(canonicalPayload);
+    signer.end();
+    const signatureBase64 = signer.sign(privateKeyPem, 'base64');
+
+    res.json({
+      canonicalPayload,
+      signatureBase64,
+      algorithm: 'SHA256withECDSA',
+      timestamp: timestamp || new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Signing failed: ${err.message}` });
+  }
+});
+
+// Cryptographic Consortium & MSP Key Inventory
+app.get('/api/keys/summary', (req, res) => {
+  try {
+    const summaryPaths = [
+      path.join(__dirname, '../storage/keys/keys_summary.json'),
+      path.join(__dirname, '../../keys/keys_summary.json')
+    ];
+    let foundPath = summaryPaths.find(p => fs.existsSync(p));
+    if (foundPath) {
+      const summary = JSON.parse(fs.readFileSync(foundPath, 'utf8'));
+      return res.json(summary);
+    }
+
+    res.status(404).json({ error: 'Key summary not found. Run scripts/export_and_generate_keys.js' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/keys/file/:folder/:filename', (req, res) => {
+  try {
+    const { folder, filename } = req.params;
+    // Security sanitization
+    const safeFolder = folder.replace(/[^a-zA-Z0-9_-]/g, '');
+    const safeFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '');
+
+    const candidates = [
+      path.join(__dirname, '../storage/keys', safeFolder, safeFilename),
+      path.join(__dirname, '../../keys', safeFolder, safeFilename)
+    ];
+
+    const match = candidates.find(p => fs.existsSync(p));
+    if (!match) {
+      return res.status(404).json({ error: `Key file not found: ${safeFolder}/${safeFilename}` });
+    }
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(fs.readFileSync(match, 'utf8'));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Contributor 1.2 & 1.3: Group 1 Department Autonomous Pipeline (Stages 1-3)
+app.post('/api/agents/org1-department-audit', async (req, res) => {
+  try {
+    const { requestId, details } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    const result = await runOrg1DepartmentPipeline(requestId, details || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 3. Module 2: Certificate Request & Approval Workflow
+// Contributor 1.1: Academic Chaincode Lead (Prerequisite Validation & Request Submission)
+// ==========================================
+
+// Pre-flight prerequisite verification endpoint
+app.post('/api/requests/validate-prerequisites', async (req, res) => {
+  try {
+    const { studentId, certType, details } = req.body;
+    if (!studentId) {
+      return res.status(400).json({ error: 'studentId is required' });
+    }
+
+    let studentObj = {};
+    try {
+      const studentBytes = await queryChaincode('GetStudent', [studentId]);
+      if (studentBytes) {
+        studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+      }
+    } catch (e) {
+      // If student not yet registered, evaluate with submitted metrics
+    }
+
+    const evaluation = evaluatePrerequisites(studentObj, certType || 'Degree Certificate', details || {});
+    res.json(evaluation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/requests', async (req, res) => {
   try {
-    const { requestId, studentId, certType, details } = req.body;
-    if (!requestId || !studentId) {
-      return res.status(400).json({ error: 'requestId and studentId are required' });
+    const { requestId, studentId, certType, details, bypassPrerequisites } = req.body;
+
+    // 1. Rich Schema Validation
+    const validation = validateRequestInput(req.body);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        error: 'Request schema validation failed',
+        details: validation.errors
+      });
     }
 
     let requestDetails = details || {};
@@ -104,29 +325,76 @@ app.post('/api/requests', async (req, res) => {
       }
     }
 
-    // Auto-enrich details with registered student data if missing
+    // 2. Fetch on-chain student identity & verify active lifecycle status
+    let studentObj = null;
     try {
       const studentBytes = await queryChaincode('GetStudent', [studentId]);
       if (studentBytes) {
-        const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
-        if (studentObj) {
-          requestDetails.name = requestDetails.name || studentObj.name;
-          requestDetails.department = requestDetails.department || studentObj.department;
-          requestDetails.email = requestDetails.email || studentObj.email;
-        }
+        studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
       }
     } catch (e) {
       console.warn(`[Request Creation] Student lookup note: ${e.message}`);
     }
 
-    const result = await invokeChaincode('RequestCertificate', [
-      requestId,
-      studentId,
-      certType || 'Master of Computer Applications (MCA)',
-      JSON.stringify(requestDetails)
-    ], 1);
+    if (studentObj) {
+      // Verify student lifecycle status
+      if (studentObj.status && studentObj.status !== 'ACTIVE') {
+        return res.status(400).json({
+          error: `Cannot request certificate: Student '${studentId}' status is '${studentObj.status}'. Only ACTIVE students may apply.`
+        });
+      }
 
-    res.status(201).json({ success: true, result });
+      // Auto-enrich details with registered student metadata if missing
+      requestDetails.name = requestDetails.name || studentObj.name;
+      requestDetails.department = requestDetails.department || studentObj.department;
+      requestDetails.email = requestDetails.email || studentObj.email;
+    }
+
+    // 3. Departmental Prerequisite Rules Verification
+    const targetCertType = certType || 'Master of Computer Applications (MCA)';
+    const evaluation = evaluatePrerequisites(studentObj || {}, targetCertType, requestDetails);
+
+    // If prerequisites fail and no bypass was requested, reject with HTTP 422 Unprocessable Entity
+    if (!evaluation.eligible && !bypassPrerequisites) {
+      return res.status(422).json({
+        error: 'Departmental prerequisite validation failed',
+        violations: evaluation.violations,
+        criteria: evaluation.evaluatedCriteria,
+        requirements: evaluation.requirements
+      });
+    }
+
+    // Embed evaluated prerequisite compliance audit into details for downstream autonomous agents
+    requestDetails.prerequisiteCheck = {
+      verified: evaluation.eligible,
+      criteria: evaluation.evaluatedCriteria,
+      evaluatedAt: evaluation.evaluatedAt
+    };
+
+    if (req.body.studentSignature) {
+      requestDetails.studentSignature = req.body.studentSignature;
+    }
+    if (req.body.signatureTimestamp) {
+      requestDetails.signatureTimestamp = req.body.signatureTimestamp;
+    }
+    if (req.body.requireSignature) {
+      requestDetails.requireSignature = req.body.requireSignature;
+    }
+
+    const result = await invokeChaincode('RequestCertificate', [
+      requestId.trim(),
+      studentId.trim(),
+      targetCertType,
+      JSON.stringify(requestDetails)
+    ], 1); // Org 1: Academic Department
+
+    res.status(201).json({
+      success: true,
+      requestId: requestId.trim(),
+      studentId: studentId.trim(),
+      prerequisitesVerified: evaluation.eligible,
+      result
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

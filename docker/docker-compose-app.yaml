@@ -36,9 +36,6 @@ services:
     container_name: frontend-portal
     environment:
       - PORT=3000
-    volumes:
-      - ../frontend/dist:/app/dist
-      - ../frontend/public:/app/public
     ports:
       - "3000:3000"
     networks:

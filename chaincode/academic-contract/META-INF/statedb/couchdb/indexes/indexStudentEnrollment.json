@@ -1,0 +1,7 @@
+{
+  "index": {
+    "fields": ["docType", "enrollmentYear", "department"]
+  },
+  "name": "indexStudentEnrollment",
+  "type": "json"
+}

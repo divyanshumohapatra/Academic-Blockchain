@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initRevocation();
   initLedgerExplorer();
   initAgenticEngine();
+  initKeysCenter();
   initChatbot();
 
   setInterval(initNetworkHealth, 10000);
@@ -43,6 +44,7 @@ function initTabs() {
 
       if (btn.dataset.tab === 'register-tab') loadStudents();
       if (btn.dataset.tab === 'ledger-tab') loadCertificates();
+      if (btn.dataset.tab === 'keys-tab') loadKeysSummary();
     });
   });
 }
@@ -78,6 +80,31 @@ async function initNetworkHealth() {
 function initStudentRegistration() {
   const form = document.getElementById('studentForm');
   const refreshBtn = document.getElementById('refreshStudentsBtn');
+  const genKeyBtn = document.getElementById('genStuKeyBtn');
+  const stuPubKeyInput = document.getElementById('stuPubKey');
+
+  if (genKeyBtn) {
+    genKeyBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/students/generate-keypair`, { method: 'POST' });
+        const data = await res.json();
+        if (stuPubKeyInput) stuPubKeyInput.value = data.publicKeyPem;
+
+        // Auto trigger download of student private key
+        const blob = new Blob([data.privateKeyPem], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `student_private_key_${Date.now()}.pem`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        alert(`🔑 New ECDSA P-256 Keypair generated!\n• Public Key loaded into form\n• Private Key downloaded to your computer\n• SHA-256 Fingerprint: ${data.sha256Fingerprint.substring(0, 16)}...`);
+      } catch (e) {
+        alert(`Failed to generate keypair: ${e.message}`);
+      }
+    });
+  }
 
   if (form) {
     form.addEventListener('submit', async (e) => {
@@ -89,6 +116,10 @@ function initStudentRegistration() {
         department: document.getElementById('stuDept').value.trim(),
         enrollmentYear: document.getElementById('stuYear').value.trim()
       };
+
+      if (stuPubKeyInput && stuPubKeyInput.value.trim()) {
+        payload.publicKeyPem = stuPubKeyInput.value.trim();
+      }
 
       try {
         const res = await fetch(`${API_BASE}/students`, {
@@ -119,26 +150,34 @@ async function loadStudents() {
   if (!tbody) return;
 
   try {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Fetching students...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Fetching students...</td></tr>';
     const res = await fetch(`${API_BASE}/students`);
     const students = await res.json();
 
     if (!Array.isArray(students) || students.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">No students registered yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">No students registered yet.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = students.map(s => `
-      <tr>
-        <td><code>${s.studentId}</code></td>
-        <td><strong>${s.name}</strong></td>
-        <td>${s.email}</td>
-        <td>${s.department}</td>
-        <td>${s.enrollmentYear}</td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = students.map(s => {
+      const rec = s.academicRecord || {};
+      const honors = rec.honors && rec.honors !== 'NONE' ? rec.honors : (rec.academicStanding || 'GOOD_STANDING');
+      const hasKey = Boolean(s.publicKeyPem);
+      const badgeClass = honors.includes('SUMMA') || honors.includes('MAGNA') || honors.includes('DEAN') ? 'badge-info' : '';
+
+      return `
+        <tr>
+          <td><code>${s.studentId}</code></td>
+          <td><strong>${s.name}</strong></td>
+          <td>${s.email}</td>
+          <td>${s.department}</td>
+          <td><span class="badge ${badgeClass}" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">${honors}</span></td>
+          <td>${hasKey ? '<span style="color: #16a34a; font-weight: 600; font-size: 0.8rem;">🔒 ECDSA P-256</span>' : '<span style="color: #94a3b8; font-size: 0.8rem;">None</span>'}</td>
+        </tr>
+      `;
+    }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty-hint">Error: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-hint">Error: ${err.message}</td></tr>`;
   }
 }
 
@@ -153,6 +192,43 @@ function initWorkflow() {
   const trackBtn = document.getElementById('trackReqBtn');
   const autoBtn = document.getElementById('autoAdvanceBtn');
   const issueBtn = document.getElementById('issueCertBtn');
+  const signBtn = document.getElementById('signReqBtn');
+  const reqSigInput = document.getElementById('reqStudentSig');
+
+  if (signBtn) {
+    signBtn.addEventListener('click', async () => {
+      const studentId = document.getElementById('reqStudentId').value.trim();
+      const requestId = document.getElementById('reqIdInput').value.trim();
+      const certType = document.getElementById('reqCertType').value;
+      if (!studentId || !requestId) {
+        alert('Please enter Student ID and Request ID before signing.');
+        return;
+      }
+
+      try {
+        // Fetch student demo private key from backend storage
+        const keyRes = await fetch(`${API_BASE}/keys/file/student_demo/student_demo_private_key.pem`);
+        const privateKeyPem = await keyRes.text();
+
+        const signRes = await fetch(`${API_BASE}/students/sign-payload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            privateKeyPem,
+            studentId,
+            requestId,
+            certType,
+            timestamp: new Date().toISOString()
+          })
+        });
+        const signData = await signRes.json();
+        if (reqSigInput) reqSigInput.value = signData.signatureBase64;
+        alert(`✍️ Cryptographic Digital Signature Generated!\nAlgorithm: SHA256withECDSA\nSignature: ${signData.signatureBase64.substring(0, 32)}...`);
+      } catch (err) {
+        alert(`Signing error: ${err.message}`);
+      }
+    });
+  }
 
   if (genReqBtn) {
     genReqBtn.addEventListener('click', () => {
@@ -168,11 +244,17 @@ function initWorkflow() {
       const studentId = document.getElementById('reqStudentId').value.trim();
       const certType = document.getElementById('reqCertType').value;
 
+      const bodyPayload = { requestId, studentId, certType };
+      if (reqSigInput && reqSigInput.value.trim()) {
+        bodyPayload.studentSignature = reqSigInput.value.trim();
+        bodyPayload.signatureTimestamp = new Date().toISOString();
+      }
+
       try {
         const res = await fetch(`${API_BASE}/requests`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId, studentId, certType })
+          body: JSON.stringify(bodyPayload)
         });
         const data = await res.json();
         if (res.ok) {
@@ -601,11 +683,61 @@ function initAgenticEngine() {
   const preFlightBtn = document.getElementById('runPreFlightAuditBtn');
   const fraudScanBtn = document.getElementById('runFraudScanBtn');
   const form = document.getElementById('agentOrchestrateForm');
+  const org1Btn = document.getElementById('runOrg1PipelineBtn');
   const terminal = document.getElementById('agentLogTerminal');
   const statusBadge = document.getElementById('agentExecutionStatus');
   const riskContainer = document.getElementById('riskGaugeContainer');
   const riskBadge = document.getElementById('riskScoreBadge');
   const riskFindings = document.getElementById('riskFindingsList');
+
+  // Group 1: Academic Department Autonomous Pipeline (Stages 1-3)
+  if (org1Btn) {
+    org1Btn.addEventListener('click', async () => {
+      const requestId = reqInput.value.trim();
+      if (!requestId) {
+        alert('Please enter or select a Request ID');
+        return;
+      }
+      terminal.innerHTML = '';
+      appendTerminalLog(`======================================================`);
+      appendTerminalLog(`🏛️ [Group 1: Academic Department Autonomous Pipeline Triggered]`);
+      appendTerminalLog(`Target Request: ${requestId} | Organization: Org1MSP`);
+      appendTerminalLog(`Autonomous Agents: FacultyAgent -> HODAgent -> DACAgent`);
+      appendTerminalLog(`======================================================`);
+
+      statusBadge.textContent = 'ORG1 RUNNING';
+      statusBadge.style.background = '#0284c7';
+
+      try {
+        const res = await fetch(`${API_BASE}/agents/org1-department-audit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.auditLogs) {
+            data.auditLogs.forEach(log => {
+              appendTerminalLog(`\n[${log.agent}] Stage: ${log.stage}`);
+              if (log.confidence) appendTerminalLog(`  • Confidence: ${(log.confidence * 100).toFixed(1)}%`);
+              if (log.rationale) appendTerminalLog(`  • Rationale: ${log.rationale}`);
+            });
+          }
+          statusBadge.textContent = 'ORG1 COMPLETE';
+          statusBadge.style.background = '#10b981';
+          appendTerminalLog(`\n✅ [Org1 Pipeline Complete] Stages 1–3 successfully verified and endorsed on peer0.org1:7051! Status is now DAC_APPROVED.`);
+        } else {
+          statusBadge.textContent = 'ORG1 HALTED';
+          statusBadge.style.background = '#ef4444';
+          appendTerminalLog(`\n❌ [Org1 Halted] ${data.error || 'Department audit failed'}`);
+        }
+      } catch (err) {
+        statusBadge.textContent = 'ERROR';
+        statusBadge.style.background = '#ef4444';
+        appendTerminalLog(`\n❌ [Network Error] ${err.message}`);
+      }
+    });
+  }
 
   // Load latest request
   if (loadLatestBtn) {
@@ -889,4 +1021,83 @@ function initChatbot() {
       .replace(/• /g, '• ');
   }
 }
+
+// ==========================================
+// Cryptographic Keys & MSP Identity Center
+// ==========================================
+function initKeysCenter() {
+  const genBtn = document.getElementById('genNewStudentKeyBtn');
+  const refreshBtn = document.getElementById('refreshKeysBtn');
+
+  if (genBtn) {
+    genBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/students/generate-keypair`, { method: 'POST' });
+        const data = await res.json();
+
+        // Download private key file
+        const blob = new Blob([data.privateKeyPem], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `student_private_key_${Date.now()}.pem`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        // Display in viewer
+        const viewer = document.getElementById('keyViewerCard');
+        const title = document.getElementById('keyViewerTitle');
+        const content = document.getElementById('keyViewerContent');
+        if (viewer && content) {
+          title.textContent = `Generated Student Keypair (SHA-256 Fingerprint: ${data.sha256Fingerprint.substring(0, 16)}...)`;
+          content.textContent = `--- PUBLIC KEY (ECDSA P-256) ---\n${data.publicKeyPem}\n--- PRIVATE KEY (DOWNLOADED) ---\n${data.privateKeyPem}\nHex Public Key:\n${data.publicKeyHex}`;
+          viewer.style.display = 'block';
+        }
+      } catch (err) {
+        alert(`Failed to generate student keypair: ${err.message}`);
+      }
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', loadKeysSummary);
+  }
+}
+
+async function loadKeysSummary() {
+  try {
+    const res = await fetch(`${API_BASE}/keys/summary`);
+    if (!res.ok) return;
+    const summary = await res.json();
+    console.log('[Keys Center] Loaded cryptographic keys summary:', summary);
+  } catch (e) {
+    console.warn('[Keys Center] Key summary note:', e.message);
+  }
+}
+
+window.viewKeyFile = async function(folder, filename) {
+  const viewer = document.getElementById('keyViewerCard');
+  const title = document.getElementById('keyViewerTitle');
+  const content = document.getElementById('keyViewerContent');
+
+  if (!viewer || !content) return;
+
+  try {
+    content.textContent = 'Loading cryptographic key...';
+    viewer.style.display = 'block';
+    title.textContent = `File: ${folder}/${filename}`;
+
+    const res = await fetch(`${API_BASE}/keys/file/${folder}/${filename}`);
+    if (!res.ok) {
+      content.textContent = `Unable to fetch key file (${res.status}): ${await res.text()}`;
+      return;
+    }
+    const text = await res.text();
+    content.textContent = text;
+    viewer.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    content.textContent = `Error reading key file: ${err.message}`;
+  }
+};
+
 

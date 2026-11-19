@@ -6,7 +6,8 @@ set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${DIR}/.." && pwd)"
-COMPOSE_FILE="${ROOT_DIR}/docker/docker-compose-net.yaml"
+cd "${ROOT_DIR}"
+COMPOSE_FILE="docker/docker-compose-net.yaml"
 
 MODE=$1
 
@@ -41,11 +42,11 @@ function networkUp() {
 
   # 3. Create channel and join peers
   echo "--> Creating channel and joining peers..."
-  docker exec cli /opt/gopath/src/github.com/hyperledger/fabric/peer/scripts/create-channel.sh
+  MSYS_NO_PATHCONV=1 docker exec cli bash -c "/opt/gopath/src/github.com/hyperledger/fabric/peer/scripts/create-channel.sh"
 
   # 4. Deploy chaincode
   echo "--> Deploying academic-contract chaincode across 3 orgs..."
-  docker exec cli /opt/gopath/src/github.com/hyperledger/fabric/peer/scripts/deploy-chaincode.sh
+  MSYS_NO_PATHCONV=1 docker exec cli bash -c "/opt/gopath/src/github.com/hyperledger/fabric/peer/scripts/deploy-chaincode.sh"
 
   echo "========================================================="
   echo " 🚀 3-Organization Academic Blockchain Network is LIVE! "

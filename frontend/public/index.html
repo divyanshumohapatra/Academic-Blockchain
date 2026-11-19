@@ -84,6 +84,7 @@
       <button class="tab-btn active" data-tab="workflow-tab">📋 Lifecycle & Workflow</button>
       <button class="tab-btn" data-tab="agents-tab">🤖 Autonomous Agentic Engine</button>
       <button class="tab-btn" data-tab="register-tab">👤 Student Registration</button>
+      <button class="tab-btn" data-tab="keys-tab">🔐 Cryptographic Keys & MSP</button>
       <button class="tab-btn" data-tab="revoke-tab">⚠️ Revocation</button>
       <button class="tab-btn" data-tab="ledger-tab">📊 Ledger Explorer</button>
     </nav>
@@ -113,10 +114,20 @@
               <label for="reqCertType">Degree / Certificate Type:</label>
               <select id="reqCertType">
                 <option value="Bachelor of Technology in CSE">Bachelor of Technology in CSE</option>
+                <option value="Master of Computer Applications (MCA)">Master of Computer Applications (MCA)</option>
                 <option value="Master of Science in Data Science">Master of Science in Data Science</option>
                 <option value="Bachelor of Science in AI & Robotics">Bachelor of Science in AI & Robotics</option>
                 <option value="Executive Post Graduate Diploma">Executive Post Graduate Diploma</option>
               </select>
+            </div>
+            <!-- Contributor 1.1: Cryptographic Request Signing -->
+            <div class="form-group" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label for="reqStudentSig" style="margin-bottom: 0; font-size: 0.8rem;">Digital Signature (Non-Repudiation):</label>
+                <button type="button" class="btn-secondary btn-sm" id="signReqBtn" style="font-size: 0.72rem; padding: 2px 7px;">✍️ Sign with Key</button>
+              </div>
+              <input type="text" id="reqStudentSig" placeholder="Click 'Sign with Key' or leave blank" style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;">
+              <p style="font-size: 0.72rem; color: #64748b; margin-top: 0.25rem;">Cryptographically signed with student ECDSA P-256 private key.</p>
             </div>
             <button type="submit" class="btn-primary full-width" id="submitReqBtn">Submit Certificate Request</button>
           </form>
@@ -252,6 +263,15 @@
               <label for="stuYear">Enrollment Year:</label>
               <input type="text" id="stuYear" value="2024">
             </div>
+            <!-- Contributor 1.1: Cryptographic Student Identity Keypair -->
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label for="stuPubKey" style="margin-bottom: 0;">ECDSA Public Key (SPKI PEM):</label>
+                <button type="button" class="btn-secondary btn-sm" id="genStuKeyBtn" style="font-size: 0.75rem; padding: 2px 8px;">🔑 Auto-Generate Keypair</button>
+              </div>
+              <textarea id="stuPubKey" rows="3" placeholder="Click 'Auto-Generate Keypair' or paste student SPKI PEM public key..." style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;"></textarea>
+              <p style="font-size: 0.72rem; color: #64748b; margin-top: 0.25rem;">Anchors student cryptographic identity on Fabric for non-repudiation signing.</p>
+            </div>
             <button type="submit" class="btn-primary full-width">Register Student on Ledger (Org 1)</button>
           </form>
         </div>
@@ -267,6 +287,12 @@
                 <tr>
                   <th>Student ID</th>
                   <th>Full Name</th>
+                  <th>Email</th>
+                  <th>Department</th>
+                  <th>Standing / Honors</th>
+                  <th>Crypto Identity</th>
+                </tr>
+              </thead>
                   <th>Email</th>
                   <th>Department</th>
                   <th>Year</th>
@@ -409,7 +435,14 @@
 
             <div style="margin-top: 1rem;">
               <button type="submit" class="btn-primary full-width" id="runAutoPipelineBtn" style="background: linear-gradient(135deg, #10b981, #059669); font-weight: 700; padding: 0.85rem;">
-                ⚡ 1-Click Autonomous Multi-Agent Pipeline
+                ⚡ 1-Click Autonomous Multi-Agent Pipeline (All 7 Stages)
+              </button>
+            </div>
+
+            <!-- Contributor 1.2 & 1.3: Group 1 Department Autonomous Pipeline -->
+            <div style="margin-top: 0.75rem;">
+              <button type="button" class="btn-primary full-width" id="runOrg1PipelineBtn" style="background: #0284c7; font-weight: 600; padding: 0.75rem;">
+                🏛️ Run Group 1: Academic Department Pipeline (Stages 1–3)
               </button>
             </div>
           </form>
@@ -450,6 +483,175 @@
             <p style="color: #94a3b8;">[Agent Orchestrator ready. Click '1-Click Autonomous Multi-Agent Pipeline' to start.]</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Tab 7: Cryptographic Keys & MSP Identity Center -->
+    <section id="keys-tab" class="tab-content">
+      <div class="card full-width-card" style="margin-bottom: 1.5rem;">
+        <div class="card-title">
+          <div>
+            <h3>🔐 Consortium Cryptographic Key & Decentralized Identity Center</h3>
+            <p class="subtitle" style="margin-bottom: 0;">Hyperledger Fabric 2.5 MSP Credentials & Student Non-Repudiation PKI (NIST P-256 / ECDSA)</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-primary btn-sm" id="genNewStudentKeyBtn">🔑 Generate New Student Keypair</button>
+            <button class="btn-secondary btn-sm" id="refreshKeysBtn">🔄 Refresh Keys</button>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: #475569; line-height: 1.6;">
+          In this consortium, every organization and student holds asymmetric cryptographic keypairs. Org MSP keys endorse and sign state machine transitions on Fabric peers, while students digitally sign their certificate requests with private keys to establish cryptographic non-repudiation.
+        </p>
+      </div>
+
+      <!-- Keys Cards Grid -->
+      <div class="keys-grid" id="keysCardsContainer">
+        <!-- Key Card 1: Org 1 Academic Dept -->
+        <div class="key-card">
+          <div class="key-card-header">
+            <div>
+              <h4>🏛️ Org 1: University / Academic Dept</h4>
+              <span style="font-size: 0.75rem; color: #64748b;">MSP: <code>Org1MSP</code> • Peer: <code>7051</code></span>
+            </div>
+            <span class="key-badge key-badge-org1">Org 1 MSP</span>
+          </div>
+          <p style="font-size: 0.78rem; color: #475569;">Controls student onboarding, academic transcript updates, and Stages 1–3 approvals (Faculty, HOD, DAC).</p>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org1_admin_private_key.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">ECDSA Admin Private Key (241 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org1_academic', 'org1_admin_private_key.pem')">👁️ View</button>
+              <a href="/api/keys/file/org1_academic/org1_admin_private_key.pem" download="org1_admin_private_key.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org1_admin_cert.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">X.509 Admin Certificate (814 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org1_academic', 'org1_admin_cert.pem')">👁️ View</button>
+              <a href="/api/keys/file/org1_academic/org1_admin_cert.pem" download="org1_admin_cert.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org1_ca_cert.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">Root CA Certificate (871 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org1_academic', 'org1_ca_cert.pem')">👁️ View</button>
+              <a href="/api/keys/file/org1_academic/org1_ca_cert.pem" download="org1_ca_cert.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Card 2: Org 2 Examination Board -->
+        <div class="key-card">
+          <div class="key-card-header">
+            <div>
+              <h4>📊 Org 2: Examination Board</h4>
+              <span style="font-size: 0.75rem; color: #64748b;">MSP: <code>Org2MSP</code> • Peer: <code>8051</code></span>
+            </div>
+            <span class="key-badge key-badge-org2">Org 2 MSP</span>
+          </div>
+          <p style="font-size: 0.78rem; color: #475569;">Verifies cumulative CGPAs, audits academic backlogs, and executes Stage 4 Exam Grade Lockdown with Merkle hashes.</p>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org2_admin_private_key.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">ECDSA Admin Private Key (241 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org2_examination', 'org2_admin_private_key.pem')">👁️ View</button>
+              <a href="/api/keys/file/org2_examination/org2_admin_private_key.pem" download="org2_admin_private_key.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org2_admin_cert.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">X.509 Admin Certificate (814 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org2_examination', 'org2_admin_cert.pem')">👁️ View</button>
+              <a href="/api/keys/file/org2_examination/org2_admin_cert.pem" download="org2_admin_cert.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Card 3: Org 3 Governance & Verifier -->
+        <div class="key-card">
+          <div class="key-card-header">
+            <div>
+              <h4>🏛️ Org 3: Admin & Governance</h4>
+              <span style="font-size: 0.75rem; color: #64748b;">MSP: <code>Org3MSP</code> • Peer: <code>9051</code></span>
+            </div>
+            <span class="key-badge key-badge-org3">Org 3 MSP</span>
+          </div>
+          <p style="font-size: 0.78rem; color: #475569;">Executes Stage 5 Dean Approval, Stage 6 Admin Finalization, Certificate Minting, and Ledger Revocation.</p>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org3_admin_private_key.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">ECDSA Admin Private Key (241 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org3_governance', 'org3_admin_private_key.pem')">👁️ View</button>
+              <a href="/api/keys/file/org3_governance/org3_admin_private_key.pem" download="org3_admin_private_key.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">org3_admin_cert.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">X.509 Admin Certificate (814 B)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('org3_governance', 'org3_admin_cert.pem')">👁️ View</button>
+              <a href="/api/keys/file/org3_governance/org3_admin_cert.pem" download="org3_admin_cert.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Card 4: Student Decentralized Identity (Contributor 1.1) -->
+        <div class="key-card" style="border-color: #fbcfe8;">
+          <div class="key-card-header">
+            <div>
+              <h4>🎓 Student Decentralized Keypair</h4>
+              <span style="font-size: 0.75rem; color: #db2777;">Contributor 1.1 PKI Enhancement • NIST P-256</span>
+            </div>
+            <span class="key-badge key-badge-student">Student PKI</span>
+          </div>
+          <p style="font-size: 0.78rem; color: #475569;">Public key is stored on-chain during student registration. Private key signs certificate requests to guarantee non-repudiation.</p>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">student_demo_private_key.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">ECDSA P-256 Secret Key (Kept Private)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('student_demo', 'student_demo_private_key.pem')">👁️ View</button>
+              <a href="/api/keys/file/student_demo/student_demo_private_key.pem" download="student_demo_private_key.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+          <div class="key-file-row">
+            <div>
+              <div class="key-file-name">student_demo_public_key.pem</div>
+              <span style="font-size: 0.7rem; color: #64748b;">SPKI Public Key (Anchored on Fabric)</span>
+            </div>
+            <div class="key-actions">
+              <button class="copy-btn" onclick="viewKeyFile('student_demo', 'student_demo_public_key.pem')">👁️ View</button>
+              <a href="/api/keys/file/student_demo/student_demo_public_key.pem" download="student_demo_public_key.pem" class="dl-btn" style="text-decoration:none;">⬇️ DL</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Key Content Inspector Modal / Viewer -->
+      <div id="keyViewerCard" class="card full-width-card" style="margin-top: 1.5rem; display: none;">
+        <div class="card-title">
+          <h4 id="keyViewerTitle">Key File Inspector</h4>
+          <button class="btn-secondary btn-sm" onclick="document.getElementById('keyViewerCard').style.display = 'none'">✕ Close</button>
+        </div>
+        <pre id="keyViewerContent" style="background: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 6px; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; overflow-x: auto; max-height: 250px;"></pre>
       </div>
     </section>
   </main>

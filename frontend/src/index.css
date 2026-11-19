@@ -1,18 +1,18 @@
 :root {
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
-  --bg: #0b1120;
-  --panel-bg: #1e293b;
-  --card-bg: #131d31;
-  --border: #334155;
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
-  --org1-color: #38bdf8;
-  --org2-color: #f59e0b;
-  --org3-color: #10b981;
-  --danger: #ef4444;
-  --success: #10b981;
-  --warning: #f59e0b;
+  --bg: #f8fafc;
+  --panel-bg: #ffffff;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --org1-color: #0284c7;
+  --org2-color: #d97706;
+  --org3-color: #059669;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
 }
 
 * {
@@ -32,7 +32,9 @@ body {
 code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.85em;
-  background: rgba(255, 255, 255, 0.08);
+  background: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -42,6 +44,7 @@ code {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  background-color: var(--bg);
 }
 
 .main-content {
@@ -58,11 +61,12 @@ code {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background: #080d1a;
+  background: #ffffff;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .nav-brand {
