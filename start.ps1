@@ -1,4 +1,4 @@
-﻿# Master Windows PowerShell Startup Script for 3-Organization Academic Blockchain PBL System
+# Master Windows PowerShell Startup Script for 3-Organization Academic Blockchain PBL System
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host " 🎓 Academic Blockchain PBL — 3-Organization Architecture " -ForegroundColor Yellow
 Write-Host " Consortium: Org1 (Academic), Org2 (Exam), Org3 (Admin)   " -ForegroundColor Yellow
