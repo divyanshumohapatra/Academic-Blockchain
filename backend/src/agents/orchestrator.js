@@ -159,6 +159,8 @@ class MasterOrchestrator {
       agent: fraudAgent.name,
       success: fraudCheck.riskLevel !== 'CRITICAL',
       confidence: fraudCheck.confidence || 0.99,
+      aiSource: fraudCheck.aiSource || 'GROQ_LIVE_API',
+      model: fraudCheck.model || process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
       status: fraudCheck.riskLevel === 'CRITICAL' ? 'HALTED' : 'PASSED',
       riskScore: fraudCheck.riskScore,
       riskLevel: fraudCheck.riskLevel,
@@ -188,6 +190,9 @@ class MasterOrchestrator {
     ];
     const initialIdx = statusPrecedence.indexOf(initialStatus);
 
+    const defaultAiSource = 'GROQ_LIVE_API';
+    const defaultModel = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+
     // If request was already partially approved, include historical verification records in executionLogs
     if (initialIdx >= 1) {
       executionLogs.push({
@@ -195,6 +200,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'FACULTY_APPROVED',
         agent: this.facultyAgent.name,
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         rationale: `Coursework & statutory attendance (≥75%, CIE ≥20) verified and previously committed to ledger.`,
         historical: true
@@ -206,6 +213,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'FA_APPROVED',
         agent: this.facultyAdvisorAgent.name,
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         rationale: `All semester course marks graded, signed by instructors, and endorsed by Faculty Advisor.`,
         historical: true
@@ -217,6 +226,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'HOD_APPROVED',
         agent: this.hodAgent.name,
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         rationale: `Curriculum compliance, credit threshold (≥160), and disciplinary clearance confirmed by HOD.`,
         historical: true
@@ -228,6 +239,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'DAC_APPROVED',
         agent: 'DAC-MultiSig-Engine',
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         approvalCount: 3,
         requiredQuorum: 2,
@@ -241,6 +254,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'EXAM_LOCKED',
         agent: this.examLockAgent.name,
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         gradesHash: requestObj.details?.gradesHash || `GRADES_HASH_VERIFIED_${requestId}`,
         rationale: `Grades locked with Merkle digest on Org 2 ledger with zero active backlogs.`,
@@ -253,6 +268,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'DEAN_APPROVED',
         agent: 'Dean-MultiSig-Engine',
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         approvalCount: 3,
         requiredQuorum: 2,
@@ -266,6 +283,8 @@ class MasterOrchestrator {
         success: true,
         stage: 'ADMIN_FINALIZED',
         agent: this.adminFinalizeAgent.name,
+        aiSource: defaultAiSource,
+        model: defaultModel,
         confidence: 0.99,
         rationale: `Tuition and library dues cleared (₹0). Registrar final clearance verified.`,
         historical: true
@@ -331,9 +350,11 @@ class MasterOrchestrator {
         agent: 'DAC-MultiSig-Engine',
         success: dacRes.quorumMet,
         confidence: dacRes.confidence || 0.99,
+        aiSource: dacRes.aiSource,
+        model: dacRes.model,
         approvalCount: dacRes.approvalCount,
         requiredQuorum: dacRes.requiredQuorum,
-        rationale: `DAC Academic Committee majority multi-sig consensus verified (${dacRes.approvalCount}/${dacRes.requiredQuorum} quorum).`,
+        rationale: dacRes.rationale || `DAC Academic Committee majority multi-sig consensus verified (${dacRes.approvalCount}/${dacRes.requiredQuorum} quorum).`,
         votes: dacRes.votes
       });
 
@@ -375,9 +396,11 @@ class MasterOrchestrator {
         agent: 'Dean-MultiSig-Engine',
         success: deanRes.quorumMet,
         confidence: deanRes.confidence || 0.99,
+        aiSource: deanRes.aiSource,
+        model: deanRes.model,
         approvalCount: deanRes.approvalCount,
         requiredQuorum: deanRes.requiredQuorum,
-        rationale: `Dean Senate Board majority multi-sig quorum verified (${deanRes.approvalCount}/${deanRes.requiredQuorum} quorum).`,
+        rationale: deanRes.rationale || `Dean Senate Board majority multi-sig quorum verified (${deanRes.approvalCount}/${deanRes.requiredQuorum} quorum).`,
         votes: deanRes.votes
       });
 

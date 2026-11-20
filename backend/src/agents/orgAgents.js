@@ -183,6 +183,8 @@ Output valid JSON only:
         success: false,
         stage: 'FA_APPROVED',
         agent: this.name,
+        aiSource: llmRes.source,
+        model: llmRes.model,
         confidence: 0.2,
         rationale: (audit && audit.deficitReasons.length > 0) ? audit.deficitReasons.join('; ') : rationale,
         escalate: true,
@@ -192,7 +194,7 @@ Output valid JSON only:
 
     const secret = getActorSigningSecret('FACULTY_ADVISOR');
     const faSignature = signPayload({ requestId, studentId: targetStudentId, timestamp: new Date().toISOString() }, secret);
-    const comments = `[${this.name}] Comprehensive check passed for all subjects. Signed by FA.`;
+    const comments = `[${this.name} via ${llmRes.model}] Comprehensive check passed for all subjects. Signed by FA.`;
 
     let txResult = null;
     try {
@@ -209,6 +211,8 @@ Output valid JSON only:
       success: true,
       stage: 'FA_APPROVED',
       agent: this.name,
+      aiSource: llmRes.source,
+      model: llmRes.model,
       signature: faSignature,
       confidence,
       rationale,
@@ -302,12 +306,28 @@ class DACMultiSigEngine {
     const originality = details.originalityReport !== undefined ? Number(details.originalityReport) : 94;
     const credits = details.totalCredits !== undefined ? Number(details.totalCredits) : 164;
 
+    const systemPrompt = `You are the Departmental Academic Committee (DAC) Consortium Agent (Org 1).
+Audit capstone project evaluation, research originality report, and departmental credits.
+Requirements:
+1. Capstone score >= 60/100.
+2. Originality report / plagiarism threshold >= 80%.
+3. Total credits >= 160.
+Output valid JSON only:
+{"decision":"APPROVE","confidence":0.99,"reasoning":"Capstone project and originality threshold verified."}`;
+
+    const userPrompt = `Request: ${requestId}, Capstone Score: ${capstoneScore}/100, Originality: ${originality}%, Credits: ${credits}/160`;
+    const llmRes = await hfClient.generateReasoning(systemPrompt, userPrompt, { jsonMode: true });
+    const { decision: dacDecision, confidence: dacConfidence, rationale: dacRationale } = parseLLMResponse(
+      llmRes,
+      `DAC committee quorum verified: Credits=${credits}/160, Capstone=${capstoneScore}/100, Originality=${originality}%`
+    );
+
     for (const m of this.members) {
       const secret = getActorSigningSecret(m.id);
       const signature = signPayload({ requestId, memberId: m.id, role: m.role, timestamp: new Date().toISOString() }, secret);
-      const isApproved = credits >= 160 && capstoneScore >= 60 && originality >= 80;
+      const isApproved = credits >= 160 && capstoneScore >= 60 && originality >= 80 && dacDecision === 'APPROVE';
       const decision = isApproved ? 'APPROVE' : 'REJECT';
-      const comments = isApproved ? `${m.role} verified departmental criteria (Credits: ${credits}, Capstone: ${capstoneScore}/100, Originality: ${originality}%)` : 'Deficit criteria';
+      const comments = isApproved ? `${m.role} verified departmental criteria via ${llmRes.model} (Credits: ${credits}, Capstone: ${capstoneScore}/100, Originality: ${originality}%)` : 'Deficit criteria';
 
       sisDatabase.recordMultiSigVote(requestId, 'DAC', m.id, m.name, m.role, decision, signature, comments);
 
@@ -335,7 +355,10 @@ class DACMultiSigEngine {
       approvalCount: status.approvalCount,
       totalVotes: status.totalVotes,
       requiredQuorum: status.requiredQuorum,
-      confidence: 0.99,
+      aiSource: llmRes.source,
+      model: llmRes.model,
+      confidence: dacConfidence,
+      rationale: dacRationale,
       votes
     };
   }
@@ -356,8 +379,10 @@ class DACAgent {
       success: result.quorumMet,
       stage: 'DAC_APPROVED',
       agent: this.name,
-      confidence: 0.98,
-      rationale: `DAC majority consensus satisfied (${result.approvalCount}/${result.totalVotes} votes).`,
+      aiSource: result.aiSource,
+      model: result.model,
+      confidence: result.confidence || 0.98,
+      rationale: result.rationale || `DAC majority consensus satisfied (${result.approvalCount}/${result.totalVotes} votes).`,
       txResult: result
     };
   }
@@ -399,7 +424,16 @@ Output valid JSON only:
 
     const isApproved = decision === 'APPROVE' && backlogs === 0;
     if (!isApproved) {
-      return { success: false, stage: 'EXAM_LOCKED', agent: this.name, confidence: 0.2, rationale: 'Active backlogs found', escalate: true };
+      return {
+        success: false,
+        stage: 'EXAM_LOCKED',
+        agent: this.name,
+        aiSource: llmRes.source,
+        model: llmRes.model,
+        confidence: 0.2,
+        rationale: 'Active backlogs found',
+        escalate: true
+      };
     }
 
     const comments = `[${this.name} via ${llmRes.model}] Locked (Confidence: ${(confidence * 100).toFixed(1)}%). ${rationale}`;
@@ -442,12 +476,27 @@ class DeanMultiSigEngine {
     const residencyMet = details.residencyMet !== undefined ? details.residencyMet : true;
     const institutionalClearance = details.institutionalClearance !== undefined ? details.institutionalClearance : true;
 
+    const systemPrompt = `You are the Dean Academic Senate Board Consortium Agent (Org 3).
+Audit degree residency requirements, institutional compliance, and executive sanction.
+Requirements:
+1. Academic residency requirement met: true.
+2. Institutional clearance confirmed: true.
+Output valid JSON only:
+{"decision":"APPROVE","confidence":0.99,"reasoning":"Institutional residency and senate sanction verified."}`;
+
+    const userPrompt = `Request: ${requestId}, Residency Met: ${residencyMet}, Institutional Clearance: ${institutionalClearance}`;
+    const llmRes = await hfClient.generateReasoning(systemPrompt, userPrompt, { jsonMode: true });
+    const { decision: deanDecision, confidence: deanConfidence, rationale: deanRationale } = parseLLMResponse(
+      llmRes,
+      `Dean Academic Board quorum verified: Residency=${residencyMet}, Institutional Clearance=${institutionalClearance}`
+    );
+
     for (const m of this.members) {
       const secret = getActorSigningSecret(m.id);
       const signature = signPayload({ requestId, memberId: m.id, role: m.role, timestamp: new Date().toISOString() }, secret);
-      const isApproved = residencyMet && institutionalClearance;
+      const isApproved = residencyMet && institutionalClearance && deanDecision === 'APPROVE';
       const decision = isApproved ? 'APPROVE' : 'REJECT';
-      const comments = isApproved ? `${m.role} sanctioned degree conferral based on institutional residency.` : 'Residency or clearance deficit';
+      const comments = isApproved ? `${m.role} sanctioned degree conferral via ${llmRes.model} based on institutional residency.` : 'Residency or clearance deficit';
 
       sisDatabase.recordMultiSigVote(requestId, 'DEAN', m.id, m.name, m.role, decision, signature, comments);
 
@@ -474,7 +523,10 @@ class DeanMultiSigEngine {
       approvalCount: status.approvalCount,
       totalVotes: status.totalVotes,
       requiredQuorum: status.requiredQuorum,
-      confidence: 0.99,
+      aiSource: llmRes.source,
+      model: llmRes.model,
+      confidence: deanConfidence,
+      rationale: deanRationale,
       votes
     };
   }
@@ -495,8 +547,10 @@ class DeanAgent {
       success: result.quorumMet,
       stage: 'DEAN_APPROVED',
       agent: this.name,
-      confidence: 0.99,
-      rationale: `Dean Board majority consensus satisfied (${result.approvalCount}/${result.totalVotes} votes).`,
+      aiSource: result.aiSource,
+      model: result.model,
+      confidence: result.confidence || 0.99,
+      rationale: result.rationale || `Dean Board majority consensus satisfied (${result.approvalCount}/${result.totalVotes} votes).`,
       txResult: result
     };
   }
@@ -517,18 +571,41 @@ class AdminFinalizeAgent {
 
     const feeDues = details.feeDues !== undefined ? Number(details.feeDues) : 0;
     const libraryDues = details.libraryDues !== undefined ? Number(details.libraryDues) : 0;
-    const isApproved = feeDues === 0 && libraryDues === 0;
 
-    const confidence = isApproved ? 0.99 : 0.10;
-    const rationale = isApproved
-      ? `All administrative dues cleared (Fee Dues: ₹0, Library Dues: ₹0). Final clearance verified.`
-      : `Administrative clearance blocked: Fee Dues=₹${feeDues}, Library Dues=₹${libraryDues}`;
+    const systemPrompt = `You are the Central Administration & Registrar Finalization Agent (Org 3).
+Audit institutional fee dues and library resource clearance.
+Requirements:
+1. Tuition & Fee Dues must be 0.
+2. Library Resource Dues must be 0.
+Output valid JSON only:
+{"decision":"APPROVE","confidence":0.99,"reasoning":"All administrative dues and library resources cleared."}`;
+
+    const userPrompt = `Request: ${requestId}, Fee Dues: ₹${feeDues}, Library Dues: ₹${libraryDues}`;
+    const llmRes = await hfClient.generateReasoning(systemPrompt, userPrompt, { jsonMode: true });
+
+    const { decision, confidence, rationale } = parseLLMResponse(
+      llmRes,
+      (feeDues === 0 && libraryDues === 0)
+        ? `All administrative dues cleared (Fee Dues: ₹0, Library Dues: ₹0). Final clearance verified.`
+        : `Administrative clearance blocked: Fee Dues=₹${feeDues}, Library Dues=₹${libraryDues}`
+    );
+
+    const isApproved = decision === 'APPROVE' && feeDues === 0 && libraryDues === 0;
 
     if (!isApproved) {
-      return { success: false, stage: 'ADMIN_FINALIZED', agent: this.name, confidence, rationale, escalate: true };
+      return {
+        success: false,
+        stage: 'ADMIN_FINALIZED',
+        agent: this.name,
+        aiSource: llmRes.source,
+        model: llmRes.model,
+        confidence: 0.10,
+        rationale,
+        escalate: true
+      };
     }
 
-    const comments = `[${this.name}] Finalized (Confidence: ${(confidence * 100).toFixed(1)}%). ${rationale}`;
+    const comments = `[${this.name} via ${llmRes.model}] Finalized (Confidence: ${(confidence * 100).toFixed(1)}%). ${rationale}`;
     let txResult = null;
     try {
       txResult = await invokeChaincode('FinalizeAdmin', [requestId, this.name, comments], this.orgNum);
@@ -540,6 +617,8 @@ class AdminFinalizeAgent {
       success: true,
       stage: 'ADMIN_FINALIZED',
       agent: this.name,
+      aiSource: llmRes.source,
+      model: llmRes.model,
       confidence,
       rationale,
       txResult

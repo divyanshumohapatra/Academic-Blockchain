@@ -162,7 +162,27 @@ try {
       submitted_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS certificates (
+      cert_id TEXT PRIMARY KEY,
+      request_id TEXT,
+      student_id TEXT NOT NULL,
+      student_name TEXT,
+      student_did TEXT,
+      department TEXT,
+      cert_type TEXT,
+      ipfs_hash TEXT,
+      r2_uri TEXT,
+      doc_hash TEXT,
+      issue_date TEXT,
+      status TEXT NOT NULL DEFAULT 'ISSUED',
+      created_at TEXT NOT NULL
+    );
   `);
+} catch (e) {}
+
+try {
+  db.exec('ALTER TABLE certificates ADD COLUMN r2_uri TEXT;');
 } catch (e) {}
 
 // 5 Pre-Seeded Faculties & 5 Distinct Subjects
@@ -1673,8 +1693,8 @@ function saveCertificate(cert) {
   const stmt = db.prepare(`
     INSERT INTO certificates (
       cert_id, request_id, student_id, student_name, student_did,
-      department, cert_type, ipfs_hash, doc_hash, issue_date, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      department, cert_type, ipfs_hash, r2_uri, doc_hash, issue_date, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(cert_id) DO UPDATE SET
       request_id = COALESCE(NULLIF(excluded.request_id, ''), certificates.request_id),
       student_name = COALESCE(NULLIF(excluded.student_name, ''), certificates.student_name),
@@ -1682,12 +1702,14 @@ function saveCertificate(cert) {
       department = COALESCE(NULLIF(excluded.department, ''), certificates.department),
       cert_type = COALESCE(NULLIF(excluded.cert_type, ''), certificates.cert_type),
       ipfs_hash = CASE WHEN excluded.ipfs_hash != '' THEN excluded.ipfs_hash ELSE certificates.ipfs_hash END,
+      r2_uri = CASE WHEN excluded.r2_uri != '' THEN excluded.r2_uri ELSE certificates.r2_uri END,
       doc_hash = CASE WHEN excluded.doc_hash != '' THEN excluded.doc_hash ELSE certificates.doc_hash END,
       issue_date = COALESCE(NULLIF(excluded.issue_date, ''), certificates.issue_date),
       status = COALESCE(NULLIF(excluded.status, ''), certificates.status)
   `);
 
   const ipfsHash = cert.ipfsHash || cert.ipfsCid || '';
+  const r2Uri = cert.r2Uri || cert.storageUri || (cert.certId ? `r2://academic-certificates/certificates/${cert.certId}.pdf` : '');
   const docHash = cert.docHash || cert.sha256Hash || '';
 
   stmt.run(
@@ -1699,6 +1721,7 @@ function saveCertificate(cert) {
     cert.department || '',
     cert.certType || 'Degree Certificate',
     ipfsHash,
+    r2Uri,
     docHash,
     cert.issueDate || new Date().toISOString().substring(0, 10),
     cert.status || 'ISSUED',
@@ -1723,6 +1746,7 @@ function getCertificate(certId) {
     certType: row.cert_type,
     ipfsHash: row.ipfs_hash,
     ipfsCid: row.ipfs_hash,
+    r2Uri: row.r2_uri || `r2://academic-certificates/certificates/${row.cert_id}.pdf`,
     docHash: row.doc_hash,
     sha256Hash: row.doc_hash,
     issueDate: row.issue_date,
@@ -1746,6 +1770,7 @@ function getCertificateByRequestId(requestId) {
     certType: row.cert_type,
     ipfsHash: row.ipfs_hash,
     ipfsCid: row.ipfs_hash,
+    r2Uri: row.r2_uri || `r2://academic-certificates/certificates/${row.cert_id}.pdf`,
     docHash: row.doc_hash,
     sha256Hash: row.doc_hash,
     issueDate: row.issue_date,
@@ -1767,6 +1792,7 @@ function getAllCertificates() {
     certType: row.cert_type,
     ipfsHash: row.ipfs_hash,
     ipfsCid: row.ipfs_hash,
+    r2Uri: row.r2_uri || `r2://academic-certificates/certificates/${row.cert_id}.pdf`,
     docHash: row.doc_hash,
     sha256Hash: row.doc_hash,
     issueDate: row.issue_date,
@@ -1774,6 +1800,122 @@ function getAllCertificates() {
     createdAt: row.created_at
   }));
 }
+
+function getCertificateByHash(docHash) {
+  if (!docHash) return null;
+  const clean = docHash.trim().toLowerCase();
+
+  // 1. Direct query on certificates table by doc_hash or cert_id
+  const stmt = db.prepare(`SELECT * FROM certificates WHERE LOWER(doc_hash) = ? OR LOWER(cert_id) = ? LIMIT 1`);
+  const row = stmt.get(clean, clean);
+  if (row) {
+    return {
+      certId: row.cert_id,
+      requestId: row.request_id,
+      studentId: row.student_id,
+      studentName: row.student_name,
+      studentDid: row.student_did,
+      department: row.department,
+      certType: row.cert_type,
+      ipfsHash: row.ipfs_hash,
+      ipfsCid: row.ipfs_hash,
+      r2Uri: row.r2_uri || `r2://academic-certificates/certificates/${row.cert_id}.pdf`,
+      docHash: row.doc_hash,
+      sha256Hash: row.doc_hash,
+      issueDate: row.issue_date,
+      status: row.status,
+      createdAt: row.created_at
+    };
+  }
+
+  // 2. Search in certificate_requests table
+  const allReqs = getAllCertificateRequests();
+  const matchedReq = allReqs.find(r => 
+    (r.details?.sha256Hash && r.details.sha256Hash.toLowerCase() === clean) ||
+    (r.details?.docHash && r.details.docHash.toLowerCase() === clean) ||
+    (r.details?.certId && r.details.certId.toLowerCase() === clean) ||
+    (r.requestId && r.requestId.toLowerCase() === clean)
+  );
+
+  if (matchedReq) {
+    const cId = matchedReq.details?.certId || matchedReq.requestId.replace('REQ-', 'CERT-');
+    const docVal = matchedReq.details?.sha256Hash || matchedReq.details?.docHash || clean;
+    const ipfsVal = matchedReq.details?.ipfsCid || matchedReq.details?.ipfsHash || `Qm${docVal.substring(0, 44)}`;
+    return {
+      certId: cId,
+      requestId: matchedReq.requestId,
+      studentId: matchedReq.studentId,
+      studentName: matchedReq.studentName,
+      studentDid: matchedReq.studentDid,
+      department: matchedReq.department,
+      certType: matchedReq.certType,
+      ipfsHash: ipfsVal,
+      ipfsCid: ipfsVal,
+      r2Uri: matchedReq.details?.r2Uri || `r2://academic-certificates/certificates/${cId}.pdf`,
+      docHash: docVal,
+      sha256Hash: docVal,
+      issueDate: matchedReq.updatedAt ? matchedReq.updatedAt.substring(0, 10) : new Date().toISOString().substring(0, 10),
+      status: matchedReq.status === 'REVOKED' ? 'REVOKED' : 'ISSUED',
+      createdAt: matchedReq.submittedAt
+    };
+  }
+
+  return null;
+}
+
+function getCertificateByStudentDID(did) {
+  if (!did) return null;
+  const clean = did.trim().toLowerCase();
+  const stmt = db.prepare(`SELECT * FROM certificates WHERE LOWER(student_did) = ? ORDER BY created_at DESC LIMIT 1`);
+  const row = stmt.get(clean);
+  if (row) {
+    return {
+      certId: row.cert_id,
+      requestId: row.request_id,
+      studentId: row.student_id,
+      studentName: row.student_name,
+      studentDid: row.student_did,
+      department: row.department,
+      certType: row.cert_type,
+      ipfsHash: row.ipfs_hash,
+      ipfsCid: row.ipfs_hash,
+      r2Uri: row.r2_uri || `r2://academic-certificates/certificates/${row.cert_id}.pdf`,
+      docHash: row.doc_hash,
+      sha256Hash: row.doc_hash,
+      issueDate: row.issue_date,
+      status: row.status,
+      createdAt: row.created_at
+    };
+  }
+
+  const allReqs = getAllCertificateRequests();
+  const matchedReq = allReqs.find(r => r.studentDid && r.studentDid.toLowerCase() === clean);
+  if (matchedReq) {
+    const cId = matchedReq.details?.certId || matchedReq.requestId.replace('REQ-', 'CERT-');
+    const docVal = matchedReq.details?.sha256Hash || matchedReq.details?.docHash || '';
+    const ipfsVal = matchedReq.details?.ipfsCid || matchedReq.details?.ipfsHash || (docVal ? `Qm${docVal.substring(0, 44)}` : '');
+    return {
+      certId: cId,
+      requestId: matchedReq.requestId,
+      studentId: matchedReq.studentId,
+      studentName: matchedReq.studentName,
+      studentDid: matchedReq.studentDid,
+      department: matchedReq.department,
+      certType: matchedReq.certType,
+      ipfsHash: ipfsVal,
+      ipfsCid: ipfsVal,
+      r2Uri: matchedReq.details?.r2Uri || `r2://academic-certificates/certificates/${cId}.pdf`,
+      docHash: docVal,
+      sha256Hash: docVal,
+      issueDate: matchedReq.updatedAt ? matchedReq.updatedAt.substring(0, 10) : new Date().toISOString().substring(0, 10),
+      status: matchedReq.status === 'REVOKED' ? 'REVOKED' : 'ISSUED',
+      createdAt: matchedReq.submittedAt
+    };
+  }
+
+  return null;
+}
+
 
 function seedAllCoreData() {
   const now = new Date().toISOString();
@@ -2012,6 +2154,8 @@ module.exports = {
   saveCertificate,
   getCertificate,
   getCertificateByRequestId,
+  getCertificateByHash,
+  getCertificateByStudentDID,
   getAllCertificates,
   autoApproveAndSignEligibleCourseMarks,
   seedAllCoreData,

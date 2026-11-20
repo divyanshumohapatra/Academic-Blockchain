@@ -141,15 +141,15 @@ const AGENT_STAGES = [
   },
   {
     id: "mint",
-    title: "Module 4 Certificate Minting & Storage Ecosystem",
+    title: "Module 4 Certificate Minting & Dual-Storage Ecosystem",
     org: "Consortium Ledger",
     msp: "Org3MSP",
     icon: "💎",
-    description: "4 Specialized Autonomous Agents: DID Synthesizer, PDF Cryptographer, IPFS Custodian, Fabric Notary.",
+    description: "4 Specialized Autonomous Agents: DID Synthesizer, PDF Cryptographer, IPFS & Cloudflare R2 Custodian, Fabric Notary.",
     rules: [
       "W3C-Compliant DID & Honors Classification",
       "Vector PDF Sealed with 2D QR Verification Matrix",
-      "IPFS Kubo Pinning with Round-Trip 0-Byte Integrity Probe",
+      "IPFS Kubo Pinning & Cloudflare R2 Enterprise Backup Archival",
       "Hyperledger Fabric Multi-Org Ledger State Commit"
     ]
   }
@@ -158,8 +158,8 @@ const AGENT_STAGES = [
 const MODULE_4_SUB_AGENTS = [
   { id: "metadata", name: "Agent-Metadata-Synthesizer", icon: "🤖", title: "DID & Honors Synthesizer", role: "Normalizes W3C DID and evaluates academic degree honors (Distinction ≥8.0)." },
   { id: "crypto", name: "Agent-Cert-Cryptographer", icon: "🛡️", title: "PDF & QR Cryptographer", role: "Renders vector certificate PDF, embeds high-density ISO QR matrix, and computes SHA-256 digest." },
-  { id: "ipfs", name: "Agent-IPFS-Custodian", icon: "🌐", title: "IPFS Storage Custodian", role: "Pins PDF to IPFS cluster, runs round-trip retrieval probe, and verifies bit-perfect checksum." },
-  { id: "anchor", name: "Agent-Ledger-Anchor", icon: "⛓️", title: "Fabric Ledger Notary Sentinel", role: "Submits IssueCertificate proposal across Org1, Org2, Org3, committing immutable record." }
+  { id: "ipfs", name: "Agent-IPFS-Custodian", icon: "🌐", title: "IPFS & Cloudflare R2 Custodian", role: "Pins PDF to IPFS Kubo and synchronizes Cloudflare R2 enterprise backup with bit-perfect SHA-256 verification." },
+  { id: "anchor", name: "Agent-Ledger-Anchor", icon: "⛓️", title: "Fabric Ledger Notary Sentinel", role: "Submits IssueCertificate proposal across Org1, Org2, Org3, committing IPFS CID & Cloudflare R2 URI permanently." }
 ];
 
 export const normalizeStageStatus = (status) => {
@@ -680,6 +680,7 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
 
       addLog("🎉 All 4 Certificate Agents executed and reached consensus!");
       addLog("  • IPFS CID: " + data.ipfsCid);
+      if (data.r2Uri) addLog("  • Cloudflare R2 Backup: " + data.r2Uri);
       addLog("  • SHA-256 Digest: " + data.sha256Hash);
 
       syncSelectedRequest(selectedReqId);
@@ -757,9 +758,12 @@ export default function AgenticModule({ activeRequestId, setActiveRequestId, onG
         addLog("  • LLM Confidence: " + formatConfidencePct(log.confidence) + "%");
         if (log.reasoning || log.rationale) addLog("  • Rationale: " + (log.reasoning || log.rationale));
         if (log.gradesHash) addLog("  • Merkle Digest: " + log.gradesHash);
+        if (log.ipfsCid) addLog("  • IPFS Kubo CID: " + log.ipfsCid);
+        if (log.r2Uri) addLog("  • Cloudflare R2 Backup: " + log.r2Uri);
         if (log.issuanceResult) {
           addLog("  🎉 Certificate Minted: " + log.issuanceResult.certId);
           addLog("  • IPFS CID: " + log.issuanceResult.ipfsCid);
+          if (log.issuanceResult.r2Uri) addLog("  • Cloudflare R2 Backup: " + log.issuanceResult.r2Uri);
           addLog("  • SHA-256 Digest: " + log.issuanceResult.sha256Hash);
         }
 

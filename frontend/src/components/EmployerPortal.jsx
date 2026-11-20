@@ -63,7 +63,7 @@ export default function EmployerPortal({ initialCertId }) {
     try {
       const res = await fetch(`${API_BASE}/verify/id/${encodeURIComponent(id)}`);
       const data = await res.json();
-      setResult({ ...data, queryType: 'id', queryValue: id });
+      setResult({ ...data, certificate: data.certificate || data, queryType: 'id', queryValue: id });
     } catch (err) {
       setResult({ verificationStatus: 'ERROR', message: err.message });
     } finally {
@@ -78,7 +78,7 @@ export default function EmployerPortal({ initialCertId }) {
     try {
       const res = await fetch(`${API_BASE}/verify/hash/${encodeURIComponent(hash)}`);
       const data = await res.json();
-      setResult({ ...data, queryType: 'hash', queryValue: hash, fileName });
+      setResult({ ...data, certificate: data.certificate || data, queryType: 'hash', queryValue: hash, fileName });
     } catch (err) {
       setResult({ verificationStatus: 'ERROR', message: err.message });
     } finally {
@@ -93,7 +93,7 @@ export default function EmployerPortal({ initialCertId }) {
     try {
       const res = await fetch(`${API_BASE}/verify/did/${encodeURIComponent(did)}`);
       const data = await res.json();
-      setResult({ ...data, queryType: 'did', queryValue: did, certificate: data.certificate || data });
+      setResult({ ...data, certificate: data.certificate || data, queryType: 'did', queryValue: did });
     } catch (err) {
       setResult({ verificationStatus: 'ERROR', message: err.message });
     } finally {
@@ -183,14 +183,72 @@ export default function EmployerPortal({ initialCertId }) {
   const handlePdfUpload = async () => {
     if (!selectedPdf) return;
     setLoading(true);
+    setResult(null);
     try {
       const buffer = await selectedPdf.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      await verifyByHash(hashHex, selectedPdf.name);
+
+      let payload = null;
+
+      // 1. Try instant SHA-256 digest lookup
+      try {
+        const res = await fetch(`${API_BASE}/verify/hash/${encodeURIComponent(hashHex)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && (data.verificationStatus === 'VERIFIED' || data.verificationStatus === 'REVOKED')) {
+            payload = data;
+          }
+        }
+      } catch (e) {
+        // network fallback
+      }
+
+      // 2. If not verified by hash lookup, upload directly to /api/verify/file for deep binary inspection
+      if (!payload || payload.verificationStatus === 'INVALID') {
+        try {
+          const formData = new FormData();
+          formData.append('certificate', selectedPdf);
+          const fileRes = await fetch(`${API_BASE}/verify/file`, {
+            method: 'POST',
+            body: formData
+          });
+          if (fileRes.ok) {
+            const fileData = await fileRes.json();
+            const verObj = fileData.verification || fileData;
+            if (verObj && (verObj.verificationStatus === 'VERIFIED' || verObj.verificationStatus === 'REVOKED')) {
+              payload = {
+                ...verObj,
+                certificate: fileData.certificate || verObj.certificate
+              };
+            }
+          }
+        } catch (e) {
+          // secondary fallback
+        }
+      }
+
+      if (payload) {
+        setResult({
+          ...payload,
+          certificate: payload.certificate || payload,
+          queryType: 'hash',
+          queryValue: hashHex,
+          fileName: selectedPdf.name
+        });
+      } else {
+        setResult({
+          verificationStatus: 'INVALID',
+          verified: false,
+          queryType: 'hash',
+          queryValue: hashHex,
+          fileName: selectedPdf.name,
+          message: 'Credential SHA-256 fingerprint does not match any authenticated record on the Hyperledger Fabric ledger or institutional vault.'
+        });
+      }
     } catch (err) {
-      alert(`PDF Hashing error: ${err.message}`);
+      setResult({ verificationStatus: 'ERROR', message: `PDF hashing error: ${err.message}`, fileName: selectedPdf?.name });
     } finally {
       setLoading(false);
     }

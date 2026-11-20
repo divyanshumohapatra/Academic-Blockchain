@@ -93,12 +93,19 @@ export default function ChatbotWidget() {
     setInputMessage('');
     setIsLoading(true);
 
-    // 2. Call POST /api/chat (5.2 NLP Intent Engine)
+    // 2. Call POST /api/chat (5.2 NLP Intent Engine) with RBAC role
     try {
+      const activeRole = localStorage.getItem('academic_blockchain_active_role_v1') || 'STUDENT';
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: textToSend })
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-role': activeRole
+        },
+        body: JSON.stringify({ 
+          message: textToSend,
+          role: activeRole
+        })
       });
 
       const data = await res.json();

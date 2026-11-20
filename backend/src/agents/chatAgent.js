@@ -4,6 +4,9 @@ const { queryChaincode, checkNetworkHealth } = require('../fabric');
 const { checkIPFSHealth } = require('../ipfs');
 const fraudAgent = require('./fraudAgent');
 const hfClient = require('./hfAgentClient');
+const r2 = require('../r2');
+const { ROLES } = require('../auth');
+const { handleChatMessage, detectIntent, INTENTS } = require('../intentEngine');
 
 class ChatbotAgent {
   constructor() {
@@ -12,11 +15,112 @@ class ChatbotAgent {
   }
 
   /**
-   * Process a conversational natural language prompt and return rich blockchain insights
+   * Process a conversational natural language prompt with Role-Based Access Control
    */
-  async processMessage(message) {
+  async processMessage(message, context = {}) {
     const text = message.trim();
     const lower = text.toLowerCase();
+    const role = (context.role || 'STUDENT').toUpperCase();
+    const userName = context.name || context.user || role;
+
+    // 0. Cloudflare R2 Storage & Presigned Link Queries (Admin Exclusive)
+    if (lower.includes('cloudflare') || lower.includes('r2') || (lower.includes('backup') && (lower.includes('storage') || lower.includes('link') || lower.includes('download')))) {
+      if (role !== ROLES.ADMIN) {
+        return {
+          reply: `### 🔒 Access Denied: Cloudflare R2 Enterprise Backup Storage\n\n` +
+                 `• **Current Role**: \`${role}\` (${context.org || 'Standard Access'})\n` +
+                 `• **Required Role**: \`ADMIN\` (Org 3 Central Administration)\n\n` +
+                 `⚠️ Access to Cloudflare R2 enterprise backup storage, bucket introspection, and temporary presigned download links is strictly restricted to authorized Central Administrators.\n\n` +
+                 `*To access Cloudflare R2 features, switch your role to **Administrator (Org 3)** in the Chatbot Organization selector.*`,
+          intent: 'RBAC_FORBIDDEN',
+          role
+        };
+      }
+
+      // Admin has authorized access to Cloudflare R2!
+      let certId = null;
+      const certMatch = text.match(/CERT-[A-Za-z0-9-]+/i);
+      if (certMatch) {
+        certId = certMatch[0].toUpperCase();
+      } else {
+        const stuMatch = text.match(/STU-[A-Za-z0-9-]+/i);
+        if (stuMatch) {
+          try {
+            const sisDatabase = require('../db/sisDatabase');
+            const req = sisDatabase.getCertificateRequestByStudentId(stuMatch[0].toUpperCase());
+            if (req && req.details && req.details.certId) {
+              certId = req.details.certId;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (certId) {
+        try {
+          const downloadLink = await r2.getDownloadLink(`certificates/${certId}.pdf`, 900);
+          return {
+            reply: `### ☁️ Cloudflare R2 Backup Dossier (Authorized: ${userName})\n\n` +
+                   `• **Certificate ID**: \`${certId}\`\n` +
+                   `• **Bucket**: \`${r2.BUCKET}\`\n` +
+                   `• **Primary Storage URI**: \`r2://${r2.BUCKET}/certificates/${certId}.pdf\`\n` +
+                   `• **Presigned Download URL** (Valid for 15 minutes):\n` +
+                   `  [🔗 Direct Download from Cloudflare R2](${downloadLink})\n\n` +
+                   `*Dual-Storage Archival Policy: Active (Primary IPFS Kubo + Cloudflare R2 Enterprise Backup).*`,
+            intent: 'R2_BACKUP_LINK',
+            data: { certId, downloadLink, role }
+          };
+        } catch (err) {
+          return {
+            reply: `⚠️ Error generating Cloudflare R2 download link for ${certId}: ${err.message}`,
+            intent: 'R2_ERROR'
+          };
+        }
+      }
+
+      if (lower.includes('link') || lower.includes('download')) {
+        return {
+          reply: `### ☁️ Cloudflare R2 Presigned Download Link Generator (Authorized: ${userName})\n\n` +
+                 `• **Bucket**: \`${r2.BUCKET}\`\n` +
+                 `• **Access Level**: Org 3 Central Administrator (Full Authorization)\n\n` +
+                 `Please specify the **Certificate ID** or **Student Roll Number** you would like to download (e.g. \`Get Cloudflare R2 link for CERT-2024-001\` or \`Get Cloudflare link for STU-2024-001\`).`,
+          intent: 'R2_LINK_HELP',
+          data: { role, bucket: r2.BUCKET }
+        };
+      }
+
+      const r2Health = await r2.checkR2Health();
+      return {
+        reply: `### ☁️ Cloudflare R2 Enterprise Backup Status (Authorized: ${userName})\n\n` +
+               `• **Status**: ${r2Health.healthy ? '🟢 ONLINE & OPERATIONAL' : '🟡 CONFIGURED (SIMULATED)'}\n` +
+               `• **Bucket**: \`${r2.BUCKET}\`\n` +
+               `• **S3 Endpoint**: \`${r2Health.endpoint || process.env.R2_S3_ENDPOINT}\`\n` +
+               `• **Access Tier**: Org 3 Central Administrator Exclusive\n` +
+               `• **Policy**: Synchronous dual-pinning along with IPFS Kubo for disaster recovery\n\n` +
+               `*Tip: You can ask for a presigned download link by mentioning any Certificate ID (e.g. "Get R2 link for CERT-2024-001").*`,
+        intent: 'R2_STATUS',
+        data: r2Health
+      };
+    }
+
+    // Role-based restrictions for students querying privileged operations
+    if (role === ROLES.STUDENT && (lower.includes('lock grades') || lower.includes('lock grade') || lower.includes('submit marks') || lower.includes('enter marks') || lower.includes('revoke certificate'))) {
+      return await handleChatMessage(text, context);
+    }
+
+    // Check if message matches specialized RBAC consortium operations
+    const detectedIntent = detectIntent(text);
+    if ([
+      INTENTS.COURSE_ROSTER,
+      INTENTS.CIE_AUDIT,
+      INTENTS.DEPARTMENT_AUDIT,
+      INTENTS.DAC_QUORUM,
+      INTENTS.EXAM_LOCKDOWN,
+      INTENTS.GRADE_ANOMALY,
+      INTENTS.INSTITUTIONAL_DUES,
+      INTENTS.REVOCATION_AUDIT
+    ].includes(detectedIntent)) {
+      return await handleChatMessage(text, context);
+    }
 
     // 1. Network Health & Topology Query
     if (lower.includes('health') || (lower.includes('status') && (lower.includes('network') || lower.includes('system') || lower.includes('peer')))) {
