@@ -1,17 +1,21 @@
 # 🎓 Academic Blockchain Consortium — 3-Organization Architecture
 
-> **Tamper-Evident Academic Certificate Issuance, Autonomous Multi-Agent Governance & Instant Verification System**  
-> Built on **Hyperledger Fabric 2.5 (LTS)**, **IPFS Kubo**, **W3C Decentralized Identifiers (DID)**, and an **Autonomous Multi-Agent AI Ecosystem**.  
+> **Tamper-Evident Academic Certificate Issuance, Autonomous Multi-Agent Governance, ZK-Privacy Suite & Instant Verification System**  
+> Built on **Hyperledger Fabric 2.5 (LTS)**, **IPFS Kubo**, **Cloudflare R2**, **W3C Decentralized Identifiers (DID)**, **Zero-Knowledge (ZK) Range Proofs**, and a **12-Agent Autonomous AI Ecosystem**.  
 > Containerized with **Docker** for cross-platform portability across **macOS (Apple Silicon & Intel)**, **Ubuntu Linux**, **Windows (WSL 2)**, and **Cloud VMs**.
 
 ---
 
 ## 📑 Table of Contents
 - [Architecture Overview](#-architecture-overview)
-- [Core Features & Modules](#-core-features--modules)
-- [Multi-Agent Autonomous AI Engine](#-multi-agent-autonomous-ai-engine)
+- [Complete Technology Stack](#-complete-technology-stack)
+- [Core Modules & Group Allocations](#-core-modules--group-allocations)
+- [Group 1: ZK-Passport & Zero-Knowledge Privacy Suite](#-group-1-zk-passport--zero-knowledge-privacy-suite)
+- [Comprehensive Multi-Agent AI Ecosystem (All 12 Agents)](#-comprehensive-multi-agent-ai-ecosystem-all-12-agents)
+- [Ledger-Aware Conversational AI Assistant (Chatbot Agent)](#-ledger-aware-conversational-ai-assistant-chatbot-agent)
 - [Decentralized Identity (DID) & Cryptography](#-decentralized-identity-did--cryptography)
 - [Database vs. Ledger Synergy](#-database-vs-ledger-synergy)
+- [Dual-Storage Archival (IPFS + Cloudflare R2)](#-dual-storage-archival-ipfs--cloudflare-r2)
 - [Two Ways to Run (Choose Your Mode)](#-two-ways-to-run)
   - [Option 1: Distributed 3-Org Network (`./start.sh`)](#option-1-distributed-3-org-network-standard)
   - [Option 2: All-in-One Sandbox Container (`./run-all-in-one.sh`)](#option-2-all-in-one-sandbox-container-run-anywhere)
@@ -28,113 +32,252 @@
 
 ## 🏛️ Architecture Overview
 
-The system operates as a **3-Organization Consortium** running on a shared Fabric channel (`academicchannel`) with **Raft** crash fault-tolerant consensus and decentralized **IPFS** document storage:
+The system operates as a **3-Organization Consortium** running on a shared Fabric channel (`academicchannel`) with **Raft** crash fault-tolerant ordering, decentralized **IPFS** document storage, and **Cloudflare R2** enterprise disaster recovery:
 
 ```
-+-------------------------------------------------------------------------------------------------------+
-|                                  ACADEMIC BLOCKCHAIN CONSORTIUM                                       |
-|                                                                                                       |
-|  +-----------------------------+  +-----------------------------+  +-------------------------------+  |
-|  |           Org 1             |  |           Org 2             |  |             Org 3             |  |
-|  |   University & Faculty      |  |      Examination Board      |  |     Administration & Senate   |  |
-|  +-----------------------------+  +-----------------------------+  +-------------------------------+  |
-|  | • peer0.org1:7051           |  | • peer0.org2:8051           |  | • peer0.org3:9051             |  |
-|  | • CouchDB0: 5984            |  | • CouchDB1: 6984            |  | • CouchDB2: 7984              |  |
-|  | • MSP: Org1MSP              |  | • MSP: Org2MSP              |  | • MSP: Org3MSP                |  |
-|  | • Academic Agent            |  | • Examination Agent         |  | • Admin & Senate Agent        |  |
-|  | • Faculty/FA/HOD/DAC Gates  |  | • Grade Lockdown & CGPA     |  | • Dean Sign-Off & Revocation  |  |
-|  +-----------------------------+  +-----------------------------+  +-------------------------------+  |
-|                 \                                |                                 /                  |
-|                  \                               |                                /                   |
-|                   +--------------------------------------------------------------+                    |
-|                   |             Channel: academicchannel (Fabric 2.5)            |                    |
-|                   +--------------------------------------------------------------+                    |
-|                                                  |                                                    |
-|                   +--------------------------------------------------------------+                    |
-|                   | • Raft Consensus Ordering: orderer.academic.edu:7050         |                    |
-|                   | • Decentralized Storage: IPFS Kubo (Port: 5001 / Gateway:8080|                    |
-|                   | • Off-Chain SIS Database: SQLite (university_sis.db)         |                    |
-|                   +--------------------------------------------------------------+                    |
-+-------------------------------------------------------------------------------------------------------+
++-----------------------------------------------------------------------------------------------------------------------+
+|                                           ACADEMIC BLOCKCHAIN CONSORTIUM                                              |
+|                                                                                                                       |
+|  +--------------------------------+  +--------------------------------+  +-----------------------------------------+  |
+|  |             Org 1              |  |             Org 2              |  |                  Org 3                  |  |
+|  |      University & Faculty      |  |       Examination Board        |  |          Administration & Senate        |  |
+|  +--------------------------------+  +--------------------------------+  +-----------------------------------------+  |
+|  | • peer0.org1:7051              |  | • peer0.org2:8051              |  | • peer0.org3:9051                       |  |
+|  | • CouchDB0: 5984               |  | • CouchDB1: 6984               |  | • CouchDB2: 7984                        |  |
+|  | • MSP: Org1MSP                 |  | • MSP: Org2MSP                 |  | • MSP: Org3MSP                          |  |
+|  | • Academic Department Agent    |  | • Examination Board Agent      |  | • Central Admin & Senate Agent          |  |
+|  | • ZK-Passport & Privacy Suite  |  | • Grade Lockdown & CGPA Audit  |  | • Dean Sign-Off & Revocation Notary     |  |
+|  | • Faculty/FA/HOD/DAC Quorum    |  | • Backlog Verification Engine  |  | • Cloudflare R2 Archival Custodian      |  |
+|  +--------------------------------+  +--------------------------------+  +-----------------------------------------+  |
+|                 \                                     |                                     /                         |
+|                  \                                    |                                    /                          |
+|                   +-----------------------------------------------------------------------+                           |
+|                   |                  Channel: academicchannel (Fabric 2.5)                |                           |
+|                   +-----------------------------------------------------------------------+                           |
+|                                                       |                                                               |
+|                   +-----------------------------------------------------------------------+                           |
+|                   | • Raft Consensus Ordering Service: orderer.academic.edu:7050          |                           |
+|                   | • Decentralized Storage: IPFS Kubo (Port: 5001 / Gateway: 8080)       |                           |
+|                   | • Secondary Cloud Storage: Cloudflare R2 (S3-Compatible Archival)     |                           |
+|                   | • Off-Chain SIS Database: SQLite Engine (university_sis.db)           |                           |
+|                   | • Multi-Provider LLM: Groq LLaMA-3.3 / Hugging Face Router / Local JS |                           |
+|                   +-----------------------------------------------------------------------+                           |
++-----------------------------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 🌟 Core Features & Modules
+## 💻 Complete Technology Stack
 
-### Module 1: Student Onboarding, SIS Integration & Cryptographic DID
-* **Identity Verification**: Cross-references onboarding requests against the university Student Information System (SIS) SQLite database.
-* **W3C Decentralized Identifier**: Generates an immutable, collision-resistant student DID (`did:academic:<hash160>`) via SHA-256 and RIPEMD-160.
-* **Department Filtering**: Rich CouchDB indexes enable instant filtering by department, branch, and enrollment cohort.
-
-### Module 2: 7-Stage Multi-Organization Approval Workflow
-State-machine smart contract (`academic-contract`) enforcing multi-organizational separation of duties:
-1. `SUBMITTED`: Request entered by student or academic department.
-2. `FACULTY_APPROVED`: Individual course instructors verify syllabus and marksheets.
-3. `FACULTY_ADVISOR_APPROVED`: Faculty advisor conducts comprehensive 5-course credit audit.
-4. `HOD_APPROVED`: Department Head signs off on departmental eligibility.
-5. `DAC_APPROVED`: Department Academic Committee (DAC) completes multi-sig approval.
-6. `EXAM_LOCKED`: Org 2 (Examination Board) verifies CGPA, backlogs, and locks grades.
-7. `DEAN_APPROVED` → `ADMIN_FINALIZED`: Org 3 (Dean & Senate Board) validates institutional clearance and finalizes minting eligibility.
-
-### Module 3: Vector PDF Generation & Decentralized IPFS Storage
-* **Tamper-Evident Vector Certificates**: High-resolution PDFs created dynamically with `pdfkit` featuring vector borders, official crests, and dynamic signatures.
-* **Verifiable High-Density QR**: Encodes Student ID, DID, Certificate ID, IPFS CID, SHA-256 digest, and Fabric Transaction ID directly into the certificate.
-* **Decentralized Pinning**: Uploads PDF to IPFS Kubo daemon (`5001`), extracts immutable content identifier (CID), and exposes access via the IPFS gateway (`8080`).
-
-### Module 4: Fabric Ledger Anchoring, Public Verification & Revocation
-* **On-Chain Anchoring**: Permanently records certificate metadata, SHA-256 document fingerprint, and IPFS CID onto the Fabric state ledger.
-* **Quad-Method Instant Verification**:
-  1. *By Certificate ID*: Real-time query against the ledger.
-  2. *By Student DID*: Full history of all degrees and diplomas issued to a student.
-  3. *By Document SHA-256*: Reverse hash lookup to verify physical or uploaded PDFs.
-  4. *By Verifiable QR Code*: In-browser camera scanning or image drag-and-drop.
-* **Immutable Revocation**: Authorized Org 3 administrators can revoke certificates on-chain with reason logging; state updates to `REVOKED` permanently while preserving audit history.
+| Layer | Technology | Version / Spec | Purpose |
+|---|---|---|---|
+| **Distributed Ledger (DLT)** | **Hyperledger Fabric** | v2.5 (LTS) | Permissioned enterprise blockchain consortium infrastructure |
+| **Consensus Mechanism** | **Raft (CFT)** | etcd/raft | Crash fault-tolerant distributed ordering service (`orderer:7050`) |
+| **Smart Contracts (Chaincode)**| **Fabric Contract API** | Node.js v2.5.3 | Enforces the 7-stage state machine, DID registration & ZK proofs |
+| **State Databases** | **CouchDB** | v3.3.3 | Rich JSON indexing, mango queries, and department analytics |
+| **Block Store** | **GoLevelDB** | Native Fabric | Immutable sequential cryptographic ledger storage |
+| **Decentralized Storage** | **IPFS Kubo** | v0.26.0 | Content-addressed, decentralized peer-to-peer certificate storage |
+| **Enterprise Cloud Backup** | **Cloudflare R2** | AWS S3 SDK v3 | Synchronous dual-pinning enterprise backup with presigned download links |
+| **Identity & Privacy** | **W3C DID Standard** | `did:academic:` | Decentralized Identifiers generated via SHA-256 + RIPEMD-160 |
+| **Zero-Knowledge Proofs** | **Salted Hash Commitments**| Custom ZKP | Proves CGPA $\ge \text{threshold}$ without disclosing grades or GPA |
+| **Digital Signatures** | **HMAC-SHA256 & PKI** | RFC 2104 | Vector digital authority signatures with actor signing secrets |
+| **Off-Chain Relational DB** | **SQLite (`node:sqlite`)**| Native Node 22 | University Student Information System (SIS) relational engine |
+| **AI LLM Inference (Fast)** | **Groq Cloud API** | LLaMA 3.3 70B / 3.1 8B | Sub-second generative reasoning for agent pipeline & chatbot |
+| **AI LLM Inference (Router)**| **Hugging Face Router API** | Meta LLaMA 3.1 8B | Cloud LLM inference fallback for multi-agent reasoning |
+| **Offline AI Fallback** | **Deterministic JS Heuristics**| Custom Rule Engine | Offline failsafe ensuring zero downtime if cloud APIs are unreachable |
+| **Natural Language Engine** | **Conversational Intent NLP** | Custom Engine (75KB) | Intent classification, slot extraction, contextual memory & RBAC |
+| **Backend Runtime** | **Node.js** | v22.x (LTS) | High-performance asynchronous microservice runtime |
+| **REST API Framework** | **Express.js** | v4.19.2 | Unified API gateway for blockchain, IPFS, agents & SIS |
+| **Document Cryptography** | **PDFKit & QRCode** | v0.15 / v1.5 | Tamper-evident vector PDF certificates with verifiable high-density QR |
+| **Frontend Framework** | **React & Vite** | React 18.3 / Vite 5.2 | Modern responsive single-page application & interactive UI |
+| **Containerization** | **Docker & Docker Compose** | Engine 26+ / Compose v2| Multi-architecture container orchestration (`amd64` / `arm64`) |
+| **Sandbox Container** | **Docker-in-Docker (DinD)** | `docker:26-dind` | Self-contained Option 2 All-in-One sandbox container |
 
 ---
 
-## 🤖 Multi-Agent Autonomous AI Engine
+## 🧩 Core Modules & Group Allocations
 
-The consortium is automated by a cooperative **Multi-Agent Ecosystem** operating across organizations:
+| Module | Component | Team Allocation | Core Responsibilities |
+|---|---|---|---|
+| **Module 1** | **Registration, Identity & ZK-Passport** | **Group 1** | Student onboarding, SQLite SIS integration, W3C DID derivation, **Cryptographic Academic Passport**, **Zero-Knowledge (ZK) Range Proofs**, and CouchDB rich queries. |
+| **Module 2** | **7-Stage Multi-Org State Machine** | **Group 2** | State transitions across Org 1, Org 2, and Org 3. Cross-organizational endorsement policy enforcement and **Master Multi-Agent Orchestrator**. |
+| **Module 3** | **PDF Synthesis & Dual Storage** | **Group 4** | Tamper-evident vector PDF generation, high-density verifiable QR codes, IPFS Kubo pinning, and Cloudflare R2 backup. |
+| **Module 4** | **Ledger Anchoring & Verification** | **Group 3 & 4** | Ledger state anchoring, Quad-Method Verification (ID, DID, Hash, QR), on-chain audit trails, and immutable revocation. |
+| **Module 5** | **Multi-Agent AI Ecosystem** | **Groups 2, 3, 5, 6** | 12 specialized autonomous agents: Academic Agent, Exam Agent, Senate Agent, Fraud Sentinel, Chatbot Oracle, and Health Monitor. |
+
+---
+
+## 🛡️ Group 1: ZK-Passport & Zero-Knowledge Privacy Suite
+
+Developed by **Group 1 (Academic Department Ecosystem & Decentralized Identity)**, this suite empowers students with self-sovereign verifiable credentials while guaranteeing complete privacy:
 
 ```
-                                  [ Certificate Request ]
-                                             │
-                                             ▼
-                        ┌──────────────────────────────────────────┐
-                        │       Master Multi-Agent Orchestrator     │
-                        └────────────────────┬─────────────────────┘
-                                             │
-                 ┌───────────────────────────┼───────────────────────────┐
-                 ▼                           ▼                           ▼
-      ┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
-      │ Org 1 Academic      │     │ Org 2 Exam Board    │     │ Org 3 Admin/Senate  │
-      │ Autonomous Agent    │     │ Autonomous Agent    │     │ Autonomous Agent    │
-      └──────────┬──────────┘     └──────────┬──────────┘     └──────────┬──────────┘
-                 │                           │                           │
-                 │ Attendance >= 75%         │ Backlogs = 0              │ Fee Dues = 0
-                 │ Total Credits >= 160      │ CGPA Integrity Check      │ Library Dues = 0
-                 │ CIE Marks >= 40           │ Grade Lockdown            │ Senate Clearance
-                 └───────────────────────────┼───────────────────────────┘
-                                             │
-                                             ▼
-                        ┌──────────────────────────────────────────┐
-                        │      Intelligent Fraud Detection Agent   │
-                        │    (0–100 Risk Score & Anomaly Heuristic)│
-                        └────────────────────┬─────────────────────┘
-                                             │ [ Risk < 25 / Approved ]
-                                             ▼
-                        ┌──────────────────────────────────────────┐
-                        │   Autonomous Minting & IPFS Anchoring    │
-                        └──────────────────────────────────────────┘
++─────────────────────────────────────────────────────────────────────────────────────────────────+
+|                          GROUP 1: ZK-PASSPORT & PRIVACY PRESERVATION SUITE                      |
++─────────────────────────────────────────────────────────────────────────────────────────────────+
+|                                                                                                 |
+|   1. Cryptographic Academic Passport              2. Zero-Knowledge (ZK) Range Proofs          |
+|      (Contributor 1.1)                               (Contributor 1.2)                          |
+|      • Chaincode: IssueStudentPassport               • Chaincode: GenerateZKAcademicProof       |
+|      • On-chain passport ID: PASS-<studentId>        • Proves: CGPA >= 8.5 (or any target)      |
+|      • Embeds Latin Honors:                          • Cryptographic Salted Hash:               |
+|        - Summa Cum Laude (CGPA >= 9.5)                 ProofHash = SHA256(CGPA || salt)         |
+|        - Magna Cum Laude (CGPA >= 9.0)               • Zero disclosure of marks or transcript   |
+|        - Cum Laude (CGPA >= 8.5)                     • Fail-closed: non-qualifying requests     |
+|      • Dynamic Verifiable QR Data URL                  abort without disclosing GPA             |
+|                                                                                                 |
+|   3. Autonomous ZK Verifier Agent                 4. CouchDB Rich Queries & Department Analytics|
+|      (Contributor 1.3)                               (Contributor 1.2)                          |
+|      • Agent: Agent-ZK-Gatekeeper                    • Mango indexes: indexAcademicPassport     |
+|      • Verifies proofs on ledger without             • Department filtering:                    |
+|        disclosing student transcript to recruiters     - /api/department/students               |
+|      • Returns: SATISFIED (VERIFIED)                   - /api/department/requests               |
+|        or UNSATISFIED                                  - /api/department/honors                 |
+|                                                        - /api/department/metrics                |
++─────────────────────────────────────────────────────────────────────────────────────────────────+
 ```
 
-* **Org 1 Academic Agent**: Audits student credits, attendance, CIE marks, and course completion.
-* **Org 2 Examination Agent**: Validates CGPA calculation integrity and executes immutable grade lockdown.
-* **Org 3 Administration Agent**: Verifies institutional clearance, fee payment, and library dues.
-* **Autonomous Fraud Detection Agent**: Evaluates 0–100 fraud risk using heuristic anomaly models, detecting request replay attacks, grade inflation spikes, and identity collisions.
-* **Conversational Ledger AI Assistant (Chatbot)**: Multi-provider LLM integration (Groq Ultra-Fast LLaMA 3.3 / Hugging Face Router / Deterministic local fallback) answering natural language questions about ledger records and transaction histories.
-* **1-Click Master Multi-Agent Pipeline**: Executes all 7 verification gates, fraud scans, PDF generation, IPFS pinning, and Fabric minting in under 10 seconds.
+### Key Capabilities:
+1. **Verifiable Academic Passport**:
+   * Generates an official on-ledger passport record containing student DID, degree, Latin honors classification, status, and issuing authority MSP (`Org1MSP`).
+   * Emits a dynamic QR code that verifiers can scan to immediately confirm the candidate's active academic credentials.
+2. **Zero-Knowledge Range Proofs**:
+   * A candidate applying for a job requiring $\text{CGPA} \ge 8.5$ can generate a cryptographic proof token without ever sharing their actual GPA or grades.
+   * Uses a fresh random 16-byte nonce/salt per proof, rendering proofs of the same claim completely unlinkable.
+3. **Autonomous ZK Gatekeeper Agent**:
+   * Recruiters submit the `proofHash` and target threshold to `/api/zk/verify-proof`. The agent cross-references the on-chain cryptographic commitment and certifies that the student satisfies the requirement with 100% mathematical certainty.
+
+---
+
+## 🤖 Comprehensive Multi-Agent AI Ecosystem (All 12 Agents)
+
+The consortium employs a collaborative network of **12 specialized autonomous agents** executing across organizations:
+
+```
+                                      [ Certificate Request ]
+                                                 │
+                                                 ▼
+                            ┌──────────────────────────────────────────┐
+                            │ 1. Master Multi-Agent Orchestrator Agent │
+                            │           (Agent-Orchestrator)           │
+                            └────────────────────┬─────────────────────┘
+                                                 │
+                     ┌───────────────────────────┼───────────────────────────┐
+                     ▼                           ▼                           ▼
+          ┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+          │ 2. Org 1 Academic   │     │ 3. Org 2 Exam Board │     │ 4. Org 3 Admin      │
+          │    Department Agent │     │    Autonomous Agent │     │    & Senate Agent   │
+          └──────────┬──────────┘     └──────────┬──────────┘     └──────────┬──────────┘
+                     │                           │                           │
+                     │ Attendance >= 75%         │ Backlogs = 0              │ Fee Dues = $0
+                     │ Total Credits >= 160      │ CGPA Integrity Check      │ Library Dues = $0
+                     │ CIE Marks >= 40           │ Grade Lockdown            │ Senate Quorum >= 2/3
+                     └───────────────────────────┼───────────────────────────┘
+                                                 │
+                                                 ▼
+                            ┌──────────────────────────────────────────┐
+                            │ 5. Autonomous Fraud Sentinel Agent       │
+                            │    (0–100 Unified Risk Scoring Engine)   │
+                            └────────────────────┬─────────────────────┘
+                                                 │ [ Risk < 25 / Approved ]
+                                                 ▼
+                            ┌──────────────────────────────────────────┐
+                            │ 6. Autonomous ZK Verifier Gatekeeper     │
+                            │    (Zero-Knowledge Proof Audit)          │
+                            └────────────────────┬─────────────────────┘
+                                                 │
+                                                 ▼
+        ┌──────────────────────────────────────────────────────────────────────────────┐
+        │                 AUTONOMOUS CERTIFICATE MINTING ENGINE                        │
+        │                                                                              │
+        │  ┌───────────────────────┐ ┌───────────────────────┐ ┌────────────────────┐  │
+        │  │ 7. Metadata Synthesizer│ │ 8. Cert Cryptographer │ │ 9. IPFS Custodian  │  │
+        │  │    DID Normalization  │ │    Vector PDF & QR    │ │    Pinning & Dual R2│  │
+        │  └───────────────────────┘ └───────────────────────┘ └────────────────────┘  │
+        │                                      │                                       │
+        │                                      ▼                                       │
+        │                        ┌───────────────────────────┐                         │
+        │                        │ 10. Ledger Anchor Notary  │                         │
+        │                        │     Fabric Commit Sentinel│                         │
+        │                        └───────────────────────────┘                         │
+        └──────────────────────────────────────┬───────────────────────────────────────┘
+                                               │
+                     ┌─────────────────────────┴─────────────────────────┐
+                     ▼                                                   ▼
+          ┌─────────────────────┐                             ┌─────────────────────┐
+          │ 11. Conversational  │                             │ 12. Consensus &     │
+          │     Ledger AI Oracle│                             │     Health Sentinel │
+          │     (Chatbot Agent) │                             │     (Telemetry QA)  │
+          └─────────────────────┘                             └─────────────────────┘
+```
+
+### Detailed Agent Profiles:
+
+1. **Master Multi-Agent Orchestrator Agent (`Agent-Orchestrator`)**:
+   * **Location**: [backend/src/agents/orchestrator.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/orchestrator.js)
+   * **Role**: Master coordinator managing the 7-stage multi-organization verification pipeline in both 1-Click Autonomous Mode and Step-by-Step Collaborative Mode.
+2. **Org 1 Academic Department Agent (`Org1-Academic-Agent`)**:
+   * **Location**: [backend/src/agents/orgAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/orgAgents.js)
+   * **Role**: Audits credits ($\ge 160$), attendance ($\ge 75\%$), CIE marks ($\ge 40$), and course prerequisites to authorize Stages 1–3 (`FACULTY` → `FA` → `HOD`).
+3. **Org 2 Examination Board Agent (`Org2-Exam-Agent`)**:
+   * **Location**: [backend/src/agents/orgAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/orgAgents.js)
+   * **Role**: Audits CGPA calculation integrity, verifies backlogs ($0$), and executes immutable grade lockdown to prevent post-examination record alteration.
+4. **Org 3 Central Administration & Senate Agent (`Org3-Admin-Agent`)**:
+   * **Location**: [backend/src/agents/orgAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/orgAgents.js)
+   * **Role**: Audits fee clearance, library clearance, and disciplinary status; validates Senate multi-sig quorum ($\ge 2/3$) before minting.
+5. **Autonomous Fraud Sentinel Agent (`Agent-Fraud-Sentinel`)**:
+   * **Location**: [backend/src/agents/fraudAgent.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/fraudAgent.js)
+   * **Role**: Evaluates a unified **0–100 Fraud Risk Score** (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) using heuristic anomaly models; freezes suspicious submissions via smart contract quarantine flags.
+6. **Autonomous ZK Verifier Gatekeeper (`Agent-ZK-Gatekeeper`)**:
+   * **Location**: [backend/src/agents/orgAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/orgAgents.js)
+   * **Role**: Evaluates zero-knowledge range proofs for recruiters and employers without exposing candidate marksheets or exact grades.
+7. **Metadata & Digital Identity Synthesizer Agent (`Agent-Metadata-Synthesizer`)**:
+   * **Location**: [backend/src/agents/certMintingAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/certMintingAgents.js)
+   * **Role**: Canonicalizes student credentials, validates W3C DID schema structure, and normalizes Latin honors classifications using Groq/HF LLM reasoning.
+8. **Certificate Cryptographer Agent (`Agent-Cert-Cryptographer`)**:
+   * **Location**: [backend/src/agents/certMintingAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/certMintingAgents.js)
+   * **Role**: Generates tamper-evident vector PDF certificates with anti-counterfeiting micro-borders, dynamic vector signatures, embedded high-density QR codes, and SHA-256 digests.
+9. **IPFS Custodian & Storage Auditor Agent (`Agent-IPFS-Custodian`)**:
+   * **Location**: [backend/src/agents/certMintingAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/certMintingAgents.js)
+   * **Role**: Pins PDF artifacts to decentralized IPFS Kubo cluster, synchronizes secondary Cloudflare R2 enterprise backup, and executes round-trip retrievability audits.
+10. **Hyperledger Fabric Ledger Anchor Agent (`Agent-Ledger-Anchor`)**:
+    * **Location**: [backend/src/agents/certMintingAgents.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/certMintingAgents.js)
+    * **Role**: Gathers multi-organization endorsements across Org1, Org2, and Org3 peers and commits the immutable certificate anchor transaction to the Fabric ledger.
+11. **Conversational Ledger AI Assistant (`Agent-Ledger-Oracle`)**:
+    * **Location**: [backend/src/agents/chatAgent.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/chatAgent.js)
+    * **Role**: Ledger-aware chatbot providing conversational natural language intelligence over blockchain history, approval stages, and Cloudflare R2 backup dossiers.
+12. **Consensus & Health Sentinel Agent (`Agent-Consensus-Sentinel`)**:
+    * **Location**: [backend/src/agents/healthAgent.js](file:///Users/divyanshu/Semester%205/Academic%20Blockchain/Academic%20Blockchain/backend/src/agents/healthAgent.js)
+    * **Role**: Real-time diagnostic agent probing gRPC peer ports, verifying cross-peer block height synchronization parity, and emitting automated self-healing recommendations.
+
+---
+
+## 💬 Ledger-Aware Conversational AI Assistant (Chatbot Agent)
+
+Built by **Group 5 (Ledger AI Assistant & Events)**, the Chatbot Agent (`Agent-Ledger-Oracle`) bridges complex cryptographic ledger records with human-friendly natural language intelligence:
+
+```
++─────────────────────────────────────────────────────────────────────────────────────────────────+
+|                      CONVERSATIONAL LEDGER AI ASSISTANT (CHATBOT AGENT)                         |
++─────────────────────────────────────────────────────────────────────────────────────────────────+
+|                                                                                                 |
+|   1. 75KB Custom Intent Engine                    2. Multi-Provider LLM Integration             |
+|      • Slot filling, regex entity extraction,        • Groq Cloud: Ultra-Fast LLaMA 3.3 70B     |
+|        and contextual session memory                 • Hugging Face: Meta LLaMA 3.1 8B Router   |
+|      • Introspects live ledger history via           • Offline Failsafe: Deterministic local JS |
+|        Fabric GetHistoryForKey & queryChaincode        guarantees answers even without internet  |
+|                                                                                                 |
+|   3. Role-Based Access Control (RBAC)             4. Cloudflare R2 Presigned Download Links     |
+|      • Student: query own request & DID status       • Admins can request instant temporary S3  |
+|      • Faculty: view course marks & pending queue      download links for any certificate PDF   |
+|      • Admin: access R2 backup links & fraud stats     valid for 15 minutes                     |
+|                                                                                                 |
+|   5. Interactive UI Widget & Prompt Chips         6. Sample Queries:                            |
+|      • "Check status of request REQ-2024-001"        • "Who approved student STU-2024-001?"     |
+|      • "Verify certificate CERT-2024-001"            • "Show Fabric network block height"       |
+|      • "Show fraud audit for REQ-2024-001"           • "Get Cloudflare R2 download link"        |
++─────────────────────────────────────────────────────────────────────────────────────────────────+
+```
 
 ---
 
@@ -161,6 +304,15 @@ $$\text{DID} = \text{"did:academic:"} \mathbin{\Vert} \text{hex}(\text{Hash160})
 
 ---
 
+## ☁️ Dual-Storage Archival (IPFS + Cloudflare R2)
+
+To ensure enterprise-grade disaster recovery and permanent document retrievability:
+1. **Primary Decentralized Storage**: Uploads certificate PDFs to an **IPFS Kubo cluster** (`5001`), anchoring the content-addressed CID onto the Fabric blockchain.
+2. **Secondary Cloud Archive**: Synchronously mirrors the PDF to **Cloudflare R2** (S3-compatible object storage) under `certificates/{certId}.pdf`.
+3. **Presigned Download Links**: Central Administrators (`Org3MSP`) can query the Conversational AI Assistant to generate temporary, secure presigned URLs (valid for 15 minutes) for direct PDF downloads.
+
+---
+
 ## 🚀 Two Ways to Run
 
 Choose the mode that best fits your environment:
@@ -183,7 +335,7 @@ cd "Academic Blockchain"
 # Build and launch the self-contained sandbox image:
 ./run-all-in-one.sh
 ```
-*Or directly via standard Docker:*
+*Or directly via standard Docker CLI:*
 ```bash
 docker build -f docker/Dockerfile.all-in-one -t academic-blockchain:all-in-one .
 docker run -it --rm --privileged \
@@ -241,7 +393,7 @@ docker run -it --rm --privileged \
    * During installation, select **"Use the WSL 2 based engine"**.
    * In Docker Desktop Settings → **Resources → WSL Integration**, toggle on your **Ubuntu** distribution.
 3. **Clone Inside the WSL 2 Filesystem**:
-   Open your Ubuntu terminal and clone inside your Linux home directory (do not clone in `/mnt/c/` for maximum performance and socket compatibility):
+   Open your Ubuntu terminal and clone inside your Linux home directory:
    ```bash
    cd ~
    git clone https://github.com/divyanshumohapatra/Academic-Blockchain.git
@@ -289,6 +441,12 @@ The repository includes comprehensive automated test suites validating all modul
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Network status across Orderer, Org1, Org2, Org3, and IPFS |
+| `POST` | `/api/passport/generate` | **Group 1**: Mint Academic Passport & Dynamic QR on ledger |
+| `POST` | `/api/zk/generate-proof` | **Group 1**: Generate Zero-Knowledge CGPA Range Proof |
+| `POST` | `/api/zk/verify-proof` | **Group 1**: Recruiter ZK Gatekeeper Verification Agent |
+| `GET` | `/api/department/students` | **Group 1**: CouchDB rich query students by department |
+| `GET` | `/api/department/honors` | **Group 1**: CouchDB query students by Latin honors |
+| `GET` | `/api/department/metrics` | **Group 1**: Aggregated department CGPA & enrollment metrics |
 | `POST` | `/api/students` | Register student profile and mint W3C DID on ledger |
 | `GET` | `/api/students/:id` | Query student ledger profile and DID |
 | `POST` | `/api/requests` | Submit new certificate issuance request |
@@ -309,6 +467,7 @@ The repository includes comprehensive automated test suites validating all modul
 | `POST` | `/api/agents/audit/:requestId` | Pre-flight multi-agent credit, attendance & fraud audit |
 | `POST` | `/api/agents/orchestrate` | 1-Click Master Multi-Agent Autonomous Pipeline |
 | `POST` | `/api/agents/chat` | Conversational Ledger AI Assistant (Chatbot query) |
+| `GET` | `/api/agents/health` | Multi-agent telemetry and system health status |
 
 ---
 
@@ -342,7 +501,8 @@ Academic Blockchain/
 ├── chaincode/
 │   └── academic-contract/      # Node.js smart contract implementing 7-stage state machine
 │       ├── package.json
-│       └── index.js
+│       ├── index.js            # Chaincode contract with ZK proofs & passport issuance
+│       └── META-INF/           # CouchDB rich indexes (indexAcademicPassport)
 ├── backend/                    # Express REST API, Multi-Agent AI & Cryptography
 │   ├── Dockerfile
 │   ├── package.json
@@ -350,28 +510,33 @@ Academic Blockchain/
 │   └── src/
 │       ├── fabric.js           # Hyperledger Fabric ledger client
 │       ├── ipfs.js             # IPFS Kubo client & SHA-256 calculator
+│       ├── r2.js               # Cloudflare R2 S3-compatible dual storage client
 │       ├── pdf.js              # Vector Certificate PDF generator
 │       ├── cryptoUtil.js       # Student DID (SHA-256 + RIPEMD-160) & signatures
+│       ├── intentEngine.js     # Natural language intent engine & slot filler
+│       ├── auth.js             # Role-based access control (RBAC)
 │       ├── facultyAuth.js      # Faculty session management
 │       ├── server.js           # Express REST API server
 │       ├── db/                 # SQLite SIS database engine
 │       │   └── sisDatabase.js
 │       └── agents/             # Multi-Agent Autonomous AI Engine
-│           ├── orchestrator.js
-│           ├── fraudAgent.js
-│           ├── chatAgent.js
-│           ├── hfAgentClient.js
-│           └── certMintingAgents.js
+│           ├── orchestrator.js # Master Agent Orchestrator
+│           ├── orgAgents.js    # Org1 Academic, Org2 Exam, Org3 Admin & ZK Gatekeeper
+│           ├── fraudAgent.js   # 0–100 Fraud Risk Scoring Agent
+│           ├── certMintingAgents.js # Minting Agents (PDF, IPFS, Ledger Anchor)
+│           ├── chatAgent.js    # Conversational Ledger AI Assistant
+│           ├── healthAgent.js  # Consensus & Health Sentinel Agent
+│           └── hfAgentClient.js# Multi-provider LLM Client (Groq/HF)
 └── frontend/                   # React 18 + Vite Web Verification Portal
     ├── Dockerfile
     ├── package.json
     ├── server.js               # Web portal server & reverse proxy
     ├── src/                    # React components and dashboard
-    └── public/                 # Static assets and fallbacks
+    └── public/                 # Static assets, ZK-Passport tab & QR scanner
 ```
 
 ---
 
 ## 👥 Consortium Team & Acknowledgments
 
-Developed as an academic Problem-Based Learning (PBL) consortium project implementing decentralized identity, distributed ledger consensus, and autonomous agent orchestration.
+Developed as an academic Problem-Based Learning (PBL) consortium project implementing decentralized identity, distributed ledger consensus, zero-knowledge privacy preservation, and autonomous agent orchestration.
