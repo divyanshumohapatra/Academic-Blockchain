@@ -35,13 +35,11 @@ services:
     container_name: frontend-portal
     environment:
       - PORT=3000
-      - PORT=3000
       - BACKEND_HOST=backend-api
       - BACKEND_PORT=4000
     volumes:
       - ../frontend/server.js:/app/server.js
       - ../frontend/public:/app/public
-      - ../frontend/dist:/app/dist
     ports:
       - "3000:3000"
     networks:

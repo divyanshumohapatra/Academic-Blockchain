@@ -19,10 +19,16 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-# 2. Bring up Fabric 3-Org Network, Channel, and Chaincode
+# 2. Ensure backend configuration exists
+if [ ! -f "${DIR}/backend/.env" ]; then
+  echo "--> Initializing backend/.env from .env.example for fresh clone..."
+  cp "${DIR}/backend/.env.example" "${DIR}/backend/.env"
+fi
+
+# 3. Bring up Fabric 3-Org Network, Channel, and Chaincode
 echo ""
 echo "--> [Step 1/3] Bringing up Fabric 3-Org Network & IPFS..."
-bash network/network.sh up
+bash "${DIR}/network/network.sh" up
 
 # 3. Build & Launch Backend API and Web Portal Containers
 echo ""

@@ -1,0 +1,35 @@
+# ========================================================
+# Academic Blockchain — Option 2: All-in-One Sandbox Container
+# ========================================================
+# Packages Hyperledger Fabric 2.5, IPFS Kubo, Multi-Agent Backend,
+# and React Frontend into a single self-contained image.
+#
+# Can be run on any OS (macOS, Ubuntu/Linux, Windows WSL2, Cloud VMs)
+# with a single `docker run` command.
+# ========================================================
+
+FROM docker:26-dind
+
+# Install required system tools, bash, curl, git, and Docker Compose plugin
+RUN apk add --no-cache \
+    bash \
+    curl \
+    git \
+    coreutils \
+    jq \
+    docker-cli-compose \
+    nodejs \
+    npm
+
+WORKDIR /app/Academic-Blockchain
+
+# Copy all project files into the container image
+COPY . .
+
+# Ensure all scripts are executable
+RUN chmod +x start.sh stop.sh test-*.sh network/network.sh network/scripts/*.sh docker/entrypoint-all-in-one.sh
+
+# Web UI, Backend REST API, and IPFS ports
+EXPOSE 3000 4000 5001 8080 7050 7051 8051 9051
+
+ENTRYPOINT ["/bin/bash", "/app/Academic-Blockchain/docker/entrypoint-all-in-one.sh"]
