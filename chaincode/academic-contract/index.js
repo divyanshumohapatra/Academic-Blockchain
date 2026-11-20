@@ -1170,13 +1170,10 @@ class AcademicContract extends Contract {
   /**
    * Contributor 1.1: Issue a Verifiable Cryptographic Student Academic Passport
    */
-  async IssueStudentPassport(ctx, studentId) {
+  async IssueStudentPassport(ctx, studentId, degree) {
     const cleanStudentId = studentId.trim();
-    const studentBytes = await ctx.stub.getState(`STUDENT_${cleanStudentId}`);
-    if (!studentBytes || studentBytes.length === 0) {
-      throw new Error(`Student ${cleanStudentId} does not exist on ledger`);
-    }
-    const student = JSON.parse(studentBytes.toString());
+    const student = await this._getLedgerStudent(ctx, cleanStudentId);
+    const record = student.academicRecord || {};
     const passportId = `PASS-${cleanStudentId}`;
     const pubKeyHash = student.publicKeyPem
       ? crypto.createHash('sha256').update(student.publicKeyPem).digest('hex').substring(0, 16)
@@ -1187,46 +1184,68 @@ class AcademicContract extends Contract {
       passportId,
       studentId: cleanStudentId,
       did: `did:fabric:org1:${cleanStudentId}`,
-      fullName: student.fullName || 'Student',
+      ledgerDid: student.did || null,
+      fullName: student.name || student.fullName || 'Student',
       department: student.department || 'Academic Department',
-      degree: student.degree || 'Bachelor of Technology',
-      latinHonors: student.latinHonors || 'Honors Pending',
-      status: student.status || 'ACTIVE',
+      degree: (degree && String(degree).trim()) || student.degree || 'Bachelor of Technology',
+      latinHonors: AcademicContract.HONORS_LABELS[record.honors] || student.latinHonors || 'No Latin Honors',
+      academicStanding: record.academicStanding || 'GOOD_STANDING',
+      status: ['ACTIVE', 'GRADUATED'].includes(student.status) ? 'VERIFIED_ON_CHAIN' : (student.status || 'UNKNOWN'),
       publicKeyFingerprint: pubKeyHash,
-      transcriptDigest: student.transcriptDigest || 'NOT_COMPUTED',
+      transcriptDigest: this._studentTranscriptDigest(cleanStudentId, student),
       issuerMSP: 'Org1MSP',
-      issuedAt: new Date().toISOString()
+      issuedAt: this._getTxTimestamp(ctx)
     };
 
     await ctx.stub.putState(`PASSPORT_${cleanStudentId}`, Buffer.from(JSON.stringify(passport)));
     return JSON.stringify(passport);
   }
 
+  async _getLedgerStudent(ctx, studentId) {
+    const studentBytes = await ctx.stub.getState(`STUDENT_${studentId}`);
+    if (!studentBytes || studentBytes.length === 0) {
+      throw new Error(`Student ${studentId} does not exist on ledger`);
+    }
+    return JSON.parse(studentBytes.toString());
+  }
+
+  _studentTranscriptDigest(studentId, student) {
+    if (student.transcriptDigest) return student.transcriptDigest;
+    const r = student.academicRecord || {};
+    return this._computeTranscriptDigest(studentId, r.cgpa, r.totalCredits, r.attendance, r.backlogs, r.completedCourses);
+  }
+
   /**
    * Contributor 1.2: Generate Zero-Knowledge (ZK) Academic Range Proof
-   * Proves CGPA >= minCgpaThreshold WITHOUT disclosing actual grades or CGPA
+   * Proves CGPA >= minCgpaThreshold WITHOUT disclosing actual grades or CGPA.
+   * ProofHash = SHA-256(StudentID || ClaimedThreshold || Salt || TranscriptDigest)
    */
-  async GenerateZKAcademicProof(ctx, studentId, minCgpaThreshold, salt = 'zk_salt_secret') {
+  async GenerateZKAcademicProof(ctx, studentId, minCgpaThreshold, salt) {
     const cleanStudentId = studentId.trim();
     const threshold = parseFloat(minCgpaThreshold);
-    if (isNaN(threshold) || threshold <= 0) {
+    if (isNaN(threshold) || threshold <= 0 || threshold > 10) {
       throw new Error('Invalid minCgpaThreshold supplied');
     }
-
-    const studentBytes = await ctx.stub.getState(`STUDENT_${cleanStudentId}`);
-    if (!studentBytes || studentBytes.length === 0) {
-      throw new Error(`Student ${cleanStudentId} does not exist on ledger`);
+    if (!salt || !String(salt).trim()) {
+      throw new Error('A salt is required to generate a ZK proof');
     }
-    const student = JSON.parse(studentBytes.toString());
-    const actualCgpa = parseFloat(student.cgpa || 0);
 
-    if (actualCgpa < threshold) {
+    const student = await this._getLedgerStudent(ctx, cleanStudentId);
+    if (!['ACTIVE', 'GRADUATED'].includes(student.status)) {
+      throw new Error(`ZK Proof Generation Rejected: student status is ${student.status}`);
+    }
+    const record = student.academicRecord || {};
+    const actualCgpa = parseFloat(record.cgpa ?? student.cgpa ?? 0);
+
+    if (!(actualCgpa >= threshold)) {
       throw new Error(`ZK Proof Generation Rejected: Candidate does not satisfy threshold >= ${threshold}`);
     }
 
+    const transcriptDigest = this._studentTranscriptDigest(cleanStudentId, student);
     const proofHash = crypto.createHash('sha256')
-      .update(`${cleanStudentId}:${threshold}:${salt}:${student.transcriptDigest || 'digest'}`)
+      .update(`${cleanStudentId}:${threshold}:${salt}:${transcriptDigest}`)
       .digest('hex');
+    const timestamp = this._getTxTimestamp(ctx);
 
     const zkRecord = {
       docType: 'zkProof',
@@ -1234,10 +1253,10 @@ class AcademicContract extends Contract {
       studentId: cleanStudentId,
       claimedThreshold: threshold,
       satisfied: true,
-      saltCommitment: crypto.createHash('sha256').update(salt).digest('hex'),
-      transcriptDigest: student.transcriptDigest || null,
+      saltCommitment: crypto.createHash('sha256').update(String(salt)).digest('hex'),
       issuerMSP: 'Org1MSP',
-      timestamp: new Date().toISOString()
+      ledgerAnchor: ctx.stub.getTxID(),
+      timestamp
     };
 
     await ctx.stub.putState(`ZKPROOF_${proofHash}`, Buffer.from(JSON.stringify(zkRecord)));
@@ -1247,6 +1266,8 @@ class AcademicContract extends Contract {
       claimedThreshold: threshold,
       satisfied: true,
       issuerMSP: 'Org1MSP',
+      ledgerAnchor: zkRecord.ledgerAnchor,
+      timestamp,
       message: `Zero-Knowledge proof committed on Fabric ledger. Verified that CGPA >= ${threshold} without disclosing actual academic records.`
     });
   }
@@ -1255,22 +1276,48 @@ class AcademicContract extends Contract {
    * Contributor 1.2: Verify Zero-Knowledge Academic Proof
    */
   async VerifyZKAcademicProof(ctx, proofHash, claimedThreshold) {
-    const cleanHash = proofHash.trim();
+    const cleanHash = String(proofHash || '').trim().toLowerCase();
     const threshold = parseFloat(claimedThreshold);
     const proofBytes = await ctx.stub.getState(`ZKPROOF_${cleanHash}`);
     if (!proofBytes || proofBytes.length === 0) {
-      return JSON.stringify({ verified: false, error: 'Proof does not exist on Fabric world state' });
+      return JSON.stringify({ verified: false, proofHash: cleanHash, error: 'Proof does not exist on Fabric world state' });
     }
     const proof = JSON.parse(proofBytes.toString());
-    const valid = proof.satisfied && (threshold <= proof.claimedThreshold);
+
+    let studentStatus = 'UNKNOWN';
+    const studentBytes = await ctx.stub.getState(`STUDENT_${proof.studentId}`);
+    if (studentBytes && studentBytes.length > 0) {
+      studentStatus = JSON.parse(studentBytes.toString()).status || 'UNKNOWN';
+    }
+
+    let reason = 'Proof satisfies the claimed threshold';
+    if (isNaN(threshold)) reason = 'Invalid claimed threshold';
+    else if (!proof.satisfied) reason = 'Proof predicate was not satisfied';
+    else if (threshold > proof.claimedThreshold) reason = `Claim CGPA >= ${threshold} is stronger than the proven CGPA >= ${proof.claimedThreshold}`;
+    else if (!['ACTIVE', 'GRADUATED'].includes(studentStatus)) reason = `Student status is ${studentStatus}`;
+
+    const valid = reason === 'Proof satisfies the claimed threshold';
     return JSON.stringify({
       verified: valid,
+      reason,
       proofHash: cleanHash,
+      studentId: proof.studentId,
       claimedThreshold: threshold,
+      provenThreshold: proof.claimedThreshold,
+      studentStatus,
+      ledgerAnchor: proof.ledgerAnchor || null,
       ledgerTimestamp: proof.timestamp,
       issuerMSP: proof.issuerMSP
     });
   }
 }
+
+AcademicContract.HONORS_LABELS = {
+  SUMMA_CUM_LAUDE: 'Summa Cum Laude',
+  MAGNA_CUM_LAUDE: 'Magna Cum Laude',
+  CUM_LAUDE: 'Cum Laude',
+  DEAN_HONOR_ROLL: "Dean's Honor Roll",
+  NONE: 'No Latin Honors'
+};
 
 module.exports = AcademicContract;

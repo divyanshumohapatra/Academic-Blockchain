@@ -771,56 +771,92 @@ class Org1AcademicAutonomousAgent {
  */
 async function runZKVerifierAgent(proofHash, claimedThreshold) {
   const agentName = 'Agent-ZK-Recruiter-Audit';
-  console.log(`[${agentName}] Commencing autonomous ZK-Proof verification for hash: ${proofHash.substring(0, 16)}...`);
-
+  const started = Date.now();
+  const threshold = parseFloat(claimedThreshold);
   const steps = [];
+  const logStep = (step, status, detail) => {
+    const now = new Date();
+    steps.push({ step, status, detail, timestamp: now.toISOString(), elapsedMs: now.getTime() - started });
+  };
+  console.log(`[${agentName}] Commencing autonomous ZK-Proof verification for hash: ${String(proofHash).substring(0, 16)}...`);
 
-  // 1. Group 3 Sentinel Pre-Check
-  steps.push({
-    step: 'Sentinel Blacklist Audit',
-    status: 'CLEARED',
-    detail: 'Candidate DID not flagged in Group 3 fraud detection sentinel database.'
-  });
-
-  // 2. Query Fabric Ledger for Proof Record
+  // Ledger lookup first: the proof record tells us which candidate to screen.
+  // Any ledger error fails closed (never treated as verified).
   let proofRecord = null;
+  let ledgerError = null;
   try {
-    const raw = await queryChaincode('VerifyZKAcademicProof', [proofHash, String(claimedThreshold)], 1);
+    const raw = await queryChaincode('VerifyZKAcademicProof', [proofHash, String(threshold)], 1);
     proofRecord = typeof raw === 'string' ? JSON.parse(raw) : raw;
   } catch (err) {
-    proofRecord = {
-      verified: true,
-      proofHash,
-      claimedThreshold: parseFloat(claimedThreshold),
-      ledgerTimestamp: new Date().toISOString(),
-      issuerMSP: 'Org1MSP'
-    };
+    ledgerError = err.message;
+  }
+  const studentId = proofRecord && proofRecord.studentId;
+
+  // Stage 1: Sentinel Blacklist Audit
+  let sentinelCleared = false;
+  let sentinel = null;
+  if (!studentId) {
+    logStep('Sentinel Blacklist Audit', 'SKIPPED', 'No candidate could be resolved from the proof hash, so there is nothing to screen.');
+  } else {
+    try {
+      const sisStudent = sisDatabase.getStudentByRollNumber(studentId);
+      const fraudAgent = require('./fraudAgent');
+      sentinel = await fraudAgent.evaluateRisk(
+        { requestId: `ZK-AUDIT-${proofHash.substring(0, 8)}`, studentId, certType: 'ZK_HIRING_CLEARANCE', details: { studentId, studentDid: sisStudent?.did } },
+        sisStudent,
+        { isSimulation: true }
+      );
+      sentinelCleared = sentinel.riskScore < 75;
+      logStep('Sentinel Blacklist Audit', sentinelCleared ? 'CLEARED' : 'QUARANTINED',
+        sentinelCleared
+          ? `Candidate DID not flagged by the consortium fraud sentinel (risk ${sentinel.riskScore}/100, ${sentinel.threatLevel}).`
+          : `Consortium fraud sentinel flagged the candidate (risk ${sentinel.riskScore}/100, ${sentinel.threatLevel}).`);
+    } catch (err) {
+      logStep('Sentinel Blacklist Audit', 'ERROR', `Sentinel unavailable: ${err.message}`);
+    }
   }
 
-  // 3. Autonomous Verification Decision
-  const isValid = Boolean(proofRecord.verified !== false);
-  steps.push({
-    step: 'Cryptographic Merkle Proof Verification',
-    status: isValid ? 'VALID' : 'INVALID',
-    detail: `Merkle root mathematically satisfies CGPA >= ${claimedThreshold}. Zero disclosure of sensitive grades or backlogs.`
-  });
+  // Stage 2: Cryptographic proof verification against Fabric world state
+  const proofValid = Boolean(proofRecord && proofRecord.verified === true);
+  logStep('Cryptographic Merkle Proof Verification', proofValid ? 'VALID' : 'INVALID',
+    proofValid
+      ? `Fabric world state confirms the proof satisfies CGPA >= ${threshold}. Zero disclosure of grades or backlogs.`
+      : `Proof rejected: ${ledgerError ? 'ledger unavailable' : (proofRecord && (proofRecord.reason || proofRecord.error)) || 'unknown proof'}.`);
 
-  steps.push({
-    step: 'Consortium Signature Endorsement',
-    status: 'ENDORSED',
-    detail: `Endorsed by Org1MSP (Academic Affairs) with immutable world state commitment.`
-  });
+  // Stage 3: Consortium signature endorsement (only for a fully cleared candidate)
+  const approved = proofValid && sentinelCleared;
+  let signedAuditCertificate = null;
+  let auditSignature = null;
+  if (approved) {
+    signedAuditCertificate = `SIG-ZK-${proofHash.substring(0, 12).toUpperCase()}-APPROVED`;
+    auditSignature = signPayload({
+      certificate: signedAuditCertificate,
+      proofHash,
+      studentId,
+      claimedThreshold: threshold,
+      decision: 'HIRE_CLEARANCE_GRANTED',
+      endorsingMsp: proofRecord.issuerMSP || 'Org1MSP'
+    }, getActorSigningSecret('ZK_VERIFIER_AGENT'));
+    logStep('Consortium Signature Endorsement', 'ENDORSED', `Audit certificate ${signedAuditCertificate} signed for ${proofRecord.issuerMSP || 'Org1MSP'} (Academic Affairs).`);
+  } else {
+    logStep('Consortium Signature Endorsement', 'WITHHELD', 'No clearance certificate issued because an earlier stage did not pass.');
+  }
 
   return {
-    success: isValid,
+    success: approved,
     agent: agentName,
-    decision: isValid ? 'HIRE_CLEARANCE_GRANTED' : 'VERIFICATION_FAILED',
+    decision: approved ? 'HIRE_CLEARANCE_GRANTED' : 'VERIFICATION_FAILED',
     proofHash,
-    claimedThreshold: parseFloat(claimedThreshold),
+    claimedThreshold: threshold,
+    provenThreshold: proofRecord ? proofRecord.provenThreshold : null,
+    ledgerAnchor: proofRecord ? proofRecord.ledgerAnchor : null,
     disclosureLevel: 'ZERO_KNOWLEDGE (100% Privacy Preserved)',
+    sentinel: sentinel ? { riskScore: sentinel.riskScore, threatLevel: sentinel.threatLevel, action: sentinel.action } : null,
     steps,
-    signedAuditCertificate: `SIG-ZK-${proofHash.substring(0, 12).toUpperCase()}-APPROVED`,
-    verifiedAt: new Date().toISOString()
+    signedAuditCertificate,
+    auditSignature,
+    verifiedAt: new Date().toISOString(),
+    durationMs: Date.now() - started
   };
 }
 

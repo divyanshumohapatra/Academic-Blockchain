@@ -174,7 +174,8 @@ app.post('/api/students', async (req, res) => {
         verifiedEmail,
         verifiedDept,
         verifiedYear,
-        JSON.stringify(academicProfile)
+        JSON.stringify(academicProfile),
+        did
       ], 1); // Org 1: Academic Department
     } catch (chaincodeErr6) {
       try {
@@ -886,40 +887,89 @@ app.post('/api/agents/org1-department-audit', async (req, res) => {
   }
 });
 
+// ==========================================
+// Group 1: ZK-Passport & Privacy Suite helpers
+// ==========================================
+const HONORS_LABELS = {
+  SUMMA_CUM_LAUDE: 'Summa Cum Laude',
+  MAGNA_CUM_LAUDE: 'Magna Cum Laude',
+  CUM_LAUDE: 'Cum Laude',
+  DEAN_HONOR_ROLL: "Dean's Honor Roll",
+  NONE: 'No Latin Honors'
+};
+
+function parseLedgerResult(raw) {
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch (_) { return raw; }
+}
+
+// Academic profile sent to RegisterStudent so CGPA / honors on the ledger match the SIS.
+function buildLedgerProfileFromSis(student, did) {
+  return {
+    cgpa: Number(student?.cgpa ?? 0),
+    attendance: Number(student?.attendance ?? 0),
+    backlogs: Number(student?.backlogs ?? 0),
+    totalCredits: Number(student?.totalCredits ?? 160),
+    requiredCredits: Number(student?.requiredCredits ?? 160),
+    did
+  };
+}
+
+// Registers an SIS student on Fabric (7-arg RegisterStudent, falling back to the
+// older 6-arg signature for networks still running the previous chaincode).
+async function registerSisStudentOnLedger(studentId, overrides = {}) {
+  const student = sisDatabase.getStudentByRollNumber(studentId);
+  const name = overrides.name || student?.name || 'Student';
+  const did = overrides.did || student?.did || generateStudentDID(name, studentId);
+  const base = [
+    studentId,
+    name,
+    student?.email || `${studentId.toLowerCase()}@academic.edu`,
+    overrides.department || student?.department || 'Department of Computer Science & Engineering',
+    String(student?.enrollmentYear || 2024)
+  ];
+  let result;
+  try {
+    result = await invokeChaincode('RegisterStudent', [...base, JSON.stringify(buildLedgerProfileFromSis(student, did)), did], 1);
+  } catch (err7) {
+    result = await invokeChaincode('RegisterStudent', [...base, did], 1);
+  }
+  if (student) sisDatabase.markStudentOnLedger(studentId, did);
+  return result;
+}
+
+// Returns the on-ledger student record, registering it from the SIS first if needed.
+async function ensureStudentOnLedger(studentId) {
+  try {
+    const existing = parseLedgerResult(await queryChaincode('GetStudent', [studentId]));
+    if (existing && existing.studentId) return existing;
+  } catch (_) { /* not on ledger yet */ }
+  if (!sisDatabase.getStudentByRollNumber(studentId)) {
+    const err = new Error(`Student ${studentId} not found in the University SIS`);
+    err.status = 404;
+    throw err;
+  }
+  await registerSisStudentOnLedger(studentId);
+  return parseLedgerResult(await queryChaincode('GetStudent', [studentId]));
+}
+
 // Contributor 1.1: Cryptographic Academic Passport & Dynamic QR Code Generator
 app.post('/api/passport/generate', async (req, res) => {
   try {
-    const studentId = (req.body.studentId || 'STU-2024-001').trim();
-    let passport = null;
+    const studentId = String(req.body.studentId || 'STU-2024-001').trim();
+    await ensureStudentOnLedger(studentId);
 
-    try {
-      const raw = await invokeChaincode('IssueStudentPassport', [studentId], 1);
-      passport = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    } catch (e) {
-      // High-fidelity fallback from SIS / state
-      const stu = sisDatabase.getStudentById ? sisDatabase.getStudentById(studentId) : null;
-      passport = {
-        docType: 'academicPassport',
-        passportId: `PASS-${studentId}`,
-        studentId,
-        did: `did:fabric:org1:${studentId}`,
-        fullName: stu ? stu.name : 'Alice Johnson',
-        department: stu ? stu.department : 'Department of Computer Science & Engineering',
-        degree: stu ? stu.branch : 'Master of Computer Applications (MCA)',
-        latinHonors: (stu && stu.cgpa >= 9.0) ? 'Summa Cum Laude' : 'Magna Cum Laude',
-        status: 'VERIFIED_ON_CHAIN',
-        publicKeyFingerprint: 'f48c2b9a710e9321',
-        transcriptDigest: 'a35f9921cba10e54b67919875f2ee87c89f5bc32d8472a11e039bf82449171e2',
-        issuerMSP: 'Org1MSP',
-        issuedAt: new Date().toISOString()
-      };
+    const registration = sisDatabase.getStudentSemesterRegistration
+      ? sisDatabase.getStudentSemesterRegistration(studentId)
+      : null;
+    const degree = registration?.branch || 'Bachelor of Technology';
+
+    const passport = parseLedgerResult(await invokeChaincode('IssueStudentPassport', [studentId, degree], 1));
+    if (!passport || !passport.passportId) {
+      throw new Error('Chaincode did not return a passport record');
     }
 
-    // Dynamic QR generation
-    let QRCode = null;
-    try { QRCode = require('qrcode'); } catch (qErr) {}
-
-    let qrDataUrl = '';
+    const QRCode = require('qrcode');
     const qrPayload = JSON.stringify({
       passportId: passport.passportId,
       did: passport.did,
@@ -928,48 +978,52 @@ app.post('/api/passport/generate', async (req, res) => {
       latinHonors: passport.latinHonors,
       status: passport.status,
       issuer: passport.issuerMSP,
-      verifyUrl: `http://localhost:3000/verify?did=${passport.did}`
+      verifyUrl: `http://localhost:3000/verify?did=${encodeURIComponent(passport.did)}`
+    });
+    const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      width: 256,
+      color: { dark: '#0f172a', light: '#ffffff' }
     });
 
-    if (QRCode) {
-      qrDataUrl = await QRCode.toDataURL(qrPayload, {
-        errorCorrectionLevel: 'H',
-        margin: 2,
-        width: 256,
-        color: { dark: '#0f172a', light: '#ffffff' }
-      });
-    }
-
-    res.json({ success: true, passport, qrDataUrl, qrPayload });
+    res.json({ success: true, source: 'FABRIC_LEDGER', passport, qrDataUrl, qrPayload });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
 // Contributor 1.2: Zero-Knowledge (ZK) Academic Range Proof Generator
 app.post('/api/zk/generate-proof', async (req, res) => {
   try {
-    const studentId = (req.body.studentId || 'STU-2024-001').trim();
-    const minThreshold = parseFloat(req.body.minCgpaThreshold || 8.5);
-    const salt = req.body.salt || `zk_salt_${Date.now()}`;
+    const studentId = String(req.body.studentId || 'STU-2024-001').trim();
+    const minThreshold = parseFloat(req.body.minCgpaThreshold ?? 8.5);
+    if (!Number.isFinite(minThreshold) || minThreshold <= 0 || minThreshold > 10) {
+      return res.status(400).json({ error: 'minCgpaThreshold must be a number between 0 and 10' });
+    }
+    // Fresh random salt per proof so two proofs of the same claim are unlinkable.
+    const salt = crypto.randomBytes(16).toString('hex');
 
-    let proofRes = null;
+    await ensureStudentOnLedger(studentId);
+
+    let proofRes;
     try {
-      const raw = await invokeChaincode('GenerateZKAcademicProof', [studentId, String(minThreshold), salt], 1);
-      proofRes = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      proofRes = parseLedgerResult(await invokeChaincode('GenerateZKAcademicProof', [studentId, String(minThreshold), salt], 1));
     } catch (e) {
-      // Deterministic cryptographic hash derivation
-      const proofHash = crypto.createHash('sha256')
-        .update(`${studentId}:${minThreshold}:${salt}:academic_digest`)
-        .digest('hex');
-      proofRes = {
-        proofHash,
-        studentId,
-        claimedThreshold: minThreshold,
-        satisfied: true,
-        issuerMSP: 'Org1MSP',
-        message: `Zero-Knowledge proof generated. Verified that CGPA >= ${minThreshold} without disclosing transcripts or subject marks.`
-      };
+      if (/does not satisfy threshold/i.test(e.message)) {
+        // Fail closed without revealing the student's actual CGPA.
+        return res.status(422).json({
+          success: false,
+          satisfied: false,
+          studentId,
+          claimedThreshold: minThreshold,
+          error: `ZK proof rejected: candidate does not satisfy CGPA >= ${minThreshold}. No proof was issued and no grades were disclosed.`
+        });
+      }
+      throw e;
+    }
+    if (!proofRes || !proofRes.proofHash) {
+      throw new Error('Chaincode did not return a proof record');
     }
 
     res.json({
@@ -979,12 +1033,12 @@ app.post('/api/zk/generate-proof', async (req, res) => {
       claimedThreshold: minThreshold,
       proofToken: `ZKP-TOKEN-${proofRes.proofHash.substring(0, 16).toUpperCase()}`,
       satisfied: true,
-      issuerMSP: 'Org1MSP',
+      issuerMSP: proofRes.issuerMSP || 'Org1MSP',
       message: proofRes.message,
-      createdAt: new Date().toISOString()
+      createdAt: proofRes.timestamp || new Date().toISOString()
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -992,10 +1046,10 @@ app.post('/api/zk/generate-proof', async (req, res) => {
 app.post('/api/zk/verify-proof', async (req, res) => {
   try {
     const { proofHash, claimedThreshold } = req.body;
-    if (!proofHash) {
-      return res.status(400).json({ error: 'proofHash is required' });
+    if (!proofHash || !/^[a-fA-F0-9]{64}$/.test(String(proofHash).trim())) {
+      return res.status(400).json({ error: 'proofHash must be a 64-character SHA-256 hex string' });
     }
-    const result = await runZKVerifierAgent(proofHash, claimedThreshold || 8.5);
+    const result = await runZKVerifierAgent(String(proofHash).trim().toLowerCase(), claimedThreshold ?? 8.5);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1196,6 +1250,13 @@ app.post('/api/requests', async (req, res) => {
         isOnLedger: true
       });
       sisDatabase.markStudentOnLedger(studentId.trim(), sDid);
+    }
+
+    // Strict Ledger Check (from main): student must be registered on the blockchain ledger
+    if (!isOnLedger) {
+      return res.status(400).json({
+        error: `Ledger Verification Failed: Student "${studentId}" (${sisRecord?.name || 'Student'}) is enrolled in the University database, but has NOT been registered on the blockchain ledger yet. Please register the student on-chain in Step 1 before initiating certificate requests.`
+      });
     }
 
     // 3. Verify student semester and course registration
@@ -1501,35 +1562,18 @@ async function ensureRequestOnFabric(requestId) {
   try {
     const studentExists = await queryChaincode('GetStudent', [sisReq.studentId]);
     if (!studentExists) {
-      try {
-        await invokeChaincode('RegisterStudent', [
-          sisReq.studentId,
-          sisReq.studentName || student?.name || 'Student',
-          student?.email || `${sisReq.studentId.toLowerCase()}@academic.edu`,
-          sisReq.department || student?.department || 'Department of Computer Science & Engineering',
-          student?.enrollmentYear || 2024,
-          did
-        ], 1);
-      } catch (err6) {
-        await invokeChaincode('RegisterStudent', [
-          sisReq.studentId,
-          sisReq.studentName || student?.name || 'Student',
-          student?.email || `${sisReq.studentId.toLowerCase()}@academic.edu`,
-          sisReq.department || student?.department || 'Department of Computer Science & Engineering',
-          student?.enrollmentYear || 2024
-        ], 1);
-      }
+      await registerSisStudentOnLedger(sisReq.studentId, {
+        name: sisReq.studentName,
+        department: sisReq.department,
+        did
+      });
     }
   } catch (errReg) {
-    try {
-      await invokeChaincode('RegisterStudent', [
-        sisReq.studentId,
-        sisReq.studentName || student?.name || 'Student',
-        student?.email || `${sisReq.studentId.toLowerCase()}@academic.edu`,
-        sisReq.department || student?.department || 'Department of Computer Science & Engineering',
-        student?.enrollmentYear || 2024
-      ], 1);
-    } catch (ignore) {}
+    await registerSisStudentOnLedger(sisReq.studentId, {
+      name: sisReq.studentName,
+      department: sisReq.department,
+      did
+    }).catch(() => {});
   }
 
   // 2. Submit Request on Fabric

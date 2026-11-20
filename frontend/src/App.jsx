@@ -63,7 +63,7 @@ export default function App() {
                 Lifecycle & Multi-Sig
               </button>
 
-              {/* Group 1 Feature Tab - Positioned prominent at Tab 2 */}
+              {/* ZK-Passport & Privacy Tab */}
               <button 
                 className={`tab-btn ${activeTab === 'passport' ? 'active' : ''}`}
                 onClick={() => setActiveTab('passport')}
@@ -76,7 +76,7 @@ export default function App() {
                 }}
               >
                 <ShieldCheck size={16} />
-                🛡️ Group 1: ZK-Passport & Privacy
+                🛡️ ZK-Passport & Privacy
               </button>
 
               <button 
@@ -160,53 +160,6 @@ export default function App() {
             {/* Tab Contents */}
             {activeTab === 'workflow' && (
               <>
-                {/* Group 1 Quick Access Banner */}
-                <div style={{
-                  background: 'linear-gradient(135deg, #1e1b4b, #312e81)',
-                  borderRadius: '12px',
-                  padding: '14px 20px',
-                  marginBottom: '20px',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  boxShadow: '0 4px 12px rgba(49, 46, 129, 0.25)',
-                  flexWrap: 'wrap',
-                  gap: '12px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '26px' }}>🛡️</span>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '15px', color: '#c7d2fe' }}>
-                        Group 1 Suite: Cryptographic Academic Passport & ZK-Privacy
-                      </div>
-                      <div style={{ fontSize: '12px', opacity: 0.9, color: '#e0e7ff' }}>
-                        1.1 Academic Passport & QR • 1.2 ZK Range-Proof Engine • 1.3 Autonomous Verifier Agent
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab('passport')}
-                    style={{
-                      background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '9px 20px',
-                      borderRadius: '8px',
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                      transition: 'transform 0.15s'
-                    }}
-                  >
-                    Open Group 1 ZK-Passport Tab →
-                  </button>
-                </div>
-
                 <WorkflowModule 
                   activeRequestId={activeRequestId}
                   setActiveRequestId={setActiveRequestId}

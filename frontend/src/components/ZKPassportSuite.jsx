@@ -22,6 +22,101 @@ import {
    Contributor 1.3  –  Autonomous ZK Verifier Agent
    ───────────────────────────────────────────── */
 
+// Defined outside the component so inputs keep focus while typing.
+const Input = ({ label, value, onChange, placeholder, type = 'text' }) => (
+  <div style={{ marginBottom: '14px' }}>
+    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '5px' }}>{label}</label>
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width: '100%',
+        padding: '10px 14px',
+        border: '1.5px solid #d1d5db',
+        borderRadius: '10px',
+        fontSize: '14px',
+        outline: 'none',
+        boxSizing: 'border-box',
+        transition: 'border-color 0.2s'
+      }}
+      onFocus={e => e.target.style.borderColor = '#6366f1'}
+      onBlur={e => e.target.style.borderColor = '#d1d5db'}
+    />
+  </div>
+);
+
+const Card = ({ icon, title, color, children }) => (
+  <div style={{
+    background: '#ffffff',
+    borderRadius: '16px',
+    border: `2px solid ${color}33`,
+    boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+    flex: 1,
+    minWidth: '320px'
+  }}>
+    <div style={{
+      background: `linear-gradient(135deg, ${color}, ${color}dd)`,
+      padding: '20px 24px',
+      color: '#fff'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {icon}
+        <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>{title}</h3>
+      </div>
+    </div>
+    <div style={{ padding: '20px 24px' }}>
+      {children}
+    </div>
+  </div>
+);
+
+const Btn = ({ onClick, loading, color, children }) => (
+  <button
+    onClick={onClick}
+    disabled={loading}
+    style={{
+      width: '100%',
+      padding: '12px',
+      background: loading ? '#9ca3af' : `linear-gradient(135deg, ${color}, ${color}cc)`,
+      color: '#fff',
+      border: 'none',
+      borderRadius: '10px',
+      fontWeight: 700,
+      fontSize: '14px',
+      cursor: loading ? 'not-allowed' : 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      transition: 'transform 0.15s',
+      marginBottom: '12px'
+    }}
+  >
+    {loading && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
+    {children}
+  </button>
+);
+
+const ErrorBox = ({ msg }) => msg ? (
+  <div style={{
+    background: '#fef2f2',
+    border: '1px solid #fca5a5',
+    borderRadius: '8px',
+    padding: '10px 14px',
+    color: '#dc2626',
+    fontSize: '13px',
+    marginBottom: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  }}>
+    <XCircle size={14} /> {msg}
+  </div>
+) : null;
+
 export default function ZKPassportSuite() {
   const { API_BASE: base } = useNetwork();
   const api = base || API_BASE;
@@ -119,106 +214,9 @@ export default function ZKPassportSuite() {
   };
 
   /* ───────────── card wrapper ───────────── */
-  const Card = ({ icon, title, contributor, color, children }) => (
-    <div style={{
-      background: '#ffffff',
-      borderRadius: '16px',
-      border: `2px solid ${color}33`,
-      boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-      overflow: 'hidden',
-      flex: 1,
-      minWidth: '320px'
-    }}>
-      <div style={{
-        background: `linear-gradient(135deg, ${color}, ${color}dd)`,
-        padding: '20px 24px',
-        color: '#fff'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-          {icon}
-          <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>{title}</h3>
-        </div>
-        <span style={{
-          fontSize: '11px',
-          background: 'rgba(255,255,255,0.25)',
-          padding: '2px 10px',
-          borderRadius: '12px',
-          fontWeight: 600
-        }}>{contributor}</span>
-      </div>
-      <div style={{ padding: '20px 24px' }}>
-        {children}
-      </div>
-    </div>
-  );
 
-  const Input = ({ label, value, onChange, placeholder, type = 'text' }) => (
-    <div style={{ marginBottom: '14px' }}>
-      <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '5px' }}>{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%',
-          padding: '10px 14px',
-          border: '1.5px solid #d1d5db',
-          borderRadius: '10px',
-          fontSize: '14px',
-          outline: 'none',
-          boxSizing: 'border-box',
-          transition: 'border-color 0.2s'
-        }}
-        onFocus={e => e.target.style.borderColor = '#6366f1'}
-        onBlur={e => e.target.style.borderColor = '#d1d5db'}
-      />
-    </div>
-  );
 
-  const Btn = ({ onClick, loading, color, children }) => (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      style={{
-        width: '100%',
-        padding: '12px',
-        background: loading ? '#9ca3af' : `linear-gradient(135deg, ${color}, ${color}cc)`,
-        color: '#fff',
-        border: 'none',
-        borderRadius: '10px',
-        fontWeight: 700,
-        fontSize: '14px',
-        cursor: loading ? 'not-allowed' : 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-        transition: 'transform 0.15s',
-        marginBottom: '12px'
-      }}
-    >
-      {loading && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
-      {children}
-    </button>
-  );
 
-  const ErrorBox = ({ msg }) => msg ? (
-    <div style={{
-      background: '#fef2f2',
-      border: '1px solid #fca5a5',
-      borderRadius: '8px',
-      padding: '10px 14px',
-      color: '#dc2626',
-      fontSize: '13px',
-      marginBottom: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    }}>
-      <XCircle size={14} /> {msg}
-    </div>
-  ) : null;
 
   return (
     <section style={{ padding: '0' }}>
@@ -237,7 +235,7 @@ export default function ZKPassportSuite() {
           </h2>
         </div>
         <p style={{ margin: 0, fontSize: '14px', opacity: 0.9 }}>
-          Group 1 — Privacy-preserving academic credentials with Cryptographic Passports, QR Codes, Zero-Knowledge Proofs & Autonomous Verification
+          Privacy-preserving academic credentials with Cryptographic Passports, QR Codes, Zero-Knowledge Proofs & Autonomous Verification
         </p>
         <div style={{
           display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap'
@@ -265,7 +263,6 @@ export default function ZKPassportSuite() {
         <Card
           icon={<QrCode size={20} />}
           title="Cryptographic Academic Passport & QR"
-          contributor="Contributor 1.1"
           color="#059669"
         >
           <Input
@@ -367,7 +364,6 @@ export default function ZKPassportSuite() {
         <Card
           icon={<Lock size={20} />}
           title="ZK Academic Range-Proof Engine"
-          contributor="Contributor 1.2"
           color="#7c3aed"
         >
           <Input
@@ -376,13 +372,25 @@ export default function ZKPassportSuite() {
             onChange={setZkStudentId}
             placeholder="STU-2024-001"
           />
-          <Input
-            label="Minimum CGPA Threshold"
-            value={minCgpa}
-            onChange={setMinCgpa}
-            placeholder="8.5"
-            type="number"
-          />
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '5px' }}>
+              <span>Minimum CGPA Threshold</span>
+              <span style={{ color: '#7c3aed' }}>CGPA ≥ {Number(minCgpa).toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="10"
+              step="0.1"
+              value={minCgpa}
+              onChange={e => setMinCgpa(e.target.value)}
+              style={{ width: '100%', accentColor: '#7c3aed' }}
+              aria-label="Minimum CGPA threshold"
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#9ca3af' }}>
+              <span>5.0</span><span>10.0</span>
+            </div>
+          </div>
 
           <Btn onClick={generateZKProof} loading={zkLoading} color="#7c3aed">
             <Lock size={16} /> Generate Zero-Knowledge Proof
@@ -441,14 +449,13 @@ export default function ZKPassportSuite() {
         <Card
           icon={<Bot size={20} />}
           title="Autonomous ZK Verifier Agent"
-          contributor="Contributor 1.3"
           color="#dc2626"
         >
           <Input
             label="Proof Hash to Verify"
             value={verifyHash}
             onChange={setVerifyHash}
-            placeholder="Paste proof hash from Contributor 1.2..."
+            placeholder="Paste proof hash from the Range-Proof Engine..."
           />
           <Input
             label="Claimed CGPA Threshold"
@@ -538,6 +545,11 @@ export default function ZKPassportSuite() {
                             }}>
                               [{s.status}]
                             </span>
+                            {s.timestamp && (
+                              <span style={{ color: '#64748b', marginRight: '6px' }}>
+                                {new Date(s.timestamp).toISOString().substring(11, 23)} (+{s.elapsedMs ?? 0}ms)
+                              </span>
+                            )}
                             <strong>{s.step}:</strong> {s.detail}
                           </div>
                         ))}

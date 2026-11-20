@@ -784,7 +784,7 @@ function initAgenticEngine() {
       }
       terminal.innerHTML = '';
       appendTerminalLog(`======================================================`);
-      appendTerminalLog(`🏛️ [Group 1: Academic Department Autonomous Pipeline Triggered]`);
+      appendTerminalLog(`🏛️ [Academic Department Autonomous Pipeline Triggered]`);
       appendTerminalLog(`Target Request: ${requestId} | Organization: Org1MSP`);
       appendTerminalLog(`Autonomous Agents: FacultyAgent -> HODAgent -> DACAgent`);
       appendTerminalLog(`======================================================`);

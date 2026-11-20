@@ -95,6 +95,30 @@ function getEventStatus() {
 }
 
 /**
+ * Decode the escaped payload string printed by `peer chaincode invoke`.
+ */
+function decodeCliPayload(escaped) {
+  const bytes = [];
+  for (let i = 0; i < escaped.length; i++) {
+    const ch = escaped[i];
+    if (ch !== '\\') {
+      bytes.push(...Buffer.from(ch, 'utf8'));
+      continue;
+    }
+    const next = escaped[++i];
+    if (/[0-7]/.test(next)) {
+      const oct = escaped.substr(i, 3).match(/^[0-7]{1,3}/)[0];
+      bytes.push(parseInt(oct, 8));
+      i += oct.length - 1;
+    } else {
+      const map = { n: 10, t: 9, r: 13, '"': 34, "'": 39, '\\': 92 };
+      bytes.push(map[next] !== undefined ? map[next] : next.charCodeAt(0));
+    }
+  }
+  return Buffer.from(bytes).toString('utf8');
+}
+
+/**
  * Execute peer chaincode invoke via CLI container with direct argv.
  * Endorses across all 3 Orgs to satisfy consortium endorsement policy.
  */
@@ -144,9 +168,11 @@ async function invokeChaincode(functionName, args = [], orgNum = 1) {
         return reject(new Error(`Chaincode invoke failed (exit ${code}): ${stderr || stdout}`));
       }
       try {
-        const payloadMatch = output.match(/payload:"([^"]+)"/);
+        // Fabric prints the payload as an escaped string (\" \\ \n and octal \NNN bytes);
+        // match up to the closing unescaped quote and decode it back to UTF-8.
+        const payloadMatch = output.match(/payload:"((?:[^"\\]|\\.)*)"/);
         if (payloadMatch) {
-          const raw = payloadMatch[1].replace(/\\"/g, '"');
+          const raw = decodeCliPayload(payloadMatch[1]);
           try {
             return resolve(JSON.parse(raw));
           } catch (_) {
