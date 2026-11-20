@@ -9,8 +9,8 @@ const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
-const { invokeChaincode, queryChaincode, checkNetworkHealth, getCertificateHistory, onLedgerEvent, getEventStatus } = require('./fabric');
-const { handleChatMessage } = require('./intentEngine');
+const { invokeChaincode, queryChaincode, checkNetworkHealth, getCertificateHistory, onLedgerEvent, getEventStatus, emitLocalEvent } = require('./fabric');
+const { handleChatMessage, fetchCertHistory } = require('./intentEngine');
 const { encryptData, decryptData } = require('./cryptoUtil');
 const { generateStudentDID, isValidStudentDID, signPayload, getActorSigningSecret } = require('./cryptoUtil');
 const facultyAuth = require('./facultyAuth');
@@ -2176,27 +2176,35 @@ app.get('/api/agents/health', (req, res) => {
 function resolveLedgerKeys(rawKey) {
   if (!rawKey) return [];
   const trimmed = rawKey.trim();
-  const candidates = [];
+  const idOnly = trimmed.replace(/^(CERT|REQ|STUDENT)[\s_\-]+/i, '').trim();
+  const candidates = [trimmed];
+
+  if (idOnly && idOnly !== trimmed) {
+    candidates.push(idOnly);
+    candidates.push('REQ_' + idOnly);
+    candidates.push('CERT_' + idOnly);
+    candidates.push('REQ-' + idOnly);
+    candidates.push('CERT-' + idOnly);
+    candidates.push('STUDENT_' + idOnly);
+  }
+
   if (trimmed.startsWith('CERT_') || trimmed.startsWith('REQ_') || trimmed.startsWith('STUDENT_') || trimmed.startsWith('HASH_')) {
     candidates.push(trimmed);
-  } else if (trimmed.toLowerCase().startsWith('cert-')) {
-    candidates.push('CERT_' + trimmed);
-    candidates.push(trimmed);
-  } else if (trimmed.toLowerCase().startsWith('req-')) {
-    candidates.push('REQ_' + trimmed);
-    candidates.push(trimmed);
-  } else if (trimmed.toLowerCase().startsWith('stu-')) {
-    candidates.push('STUDENT_' + trimmed);
-    candidates.push(trimmed);
+  } else if (/^cert[\s_\-]/i.test(trimmed)) {
+    candidates.push('CERT_' + idOnly);
+    candidates.push('CERT-' + idOnly);
+  } else if (/^req[\s_\-]/i.test(trimmed)) {
+    candidates.push('REQ_' + idOnly);
+    candidates.push('REQ-' + idOnly);
   } else {
-    candidates.push('CERT_CERT-' + trimmed);
-    candidates.push('REQ_REQ-' + trimmed);
-    candidates.push('STUDENT_' + trimmed);
     candidates.push('CERT_' + trimmed);
     candidates.push('REQ_' + trimmed);
-    candidates.push(trimmed);
+    candidates.push('CERT-' + trimmed);
+    candidates.push('REQ-' + trimmed);
+    candidates.push('STUDENT_' + trimmed);
   }
-  return [...new Set(candidates)];
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 // ============================================================================
@@ -2257,6 +2265,62 @@ app.get('/api/history/:key', async (req, res) => {
       } catch (e) {
         history = [];
       }
+    }
+
+    // Direct On-Chain Chaincode Fallback (inspects on-chain stage history from Request & Certificate state)
+    if (history.length === 0) {
+      for (const cand of candidates) {
+        try {
+          const cleanCand = cand.replace(/^REQ_|^CERT_/, '');
+          const reqObj = await queryChaincode('GetCertificateRequest', [cleanCand]);
+          if (reqObj && Array.isArray(reqObj.history) && reqObj.history.length > 0) {
+            resolvedKey = cand;
+            history = reqObj.history.map((h, idx) => ({
+              txId: h.gradesHash || reqObj.gradesHash || `tx_fabric_${idx + 1}_${(h.stage || 'step').toLowerCase()}`,
+              timestamp: h.timestamp || reqObj.updatedAt || reqObj.createdAt,
+              isDelete: false,
+              value: {
+                status: h.stage,
+                stage: h.stage,
+                actor: h.updatedBy || 'ConsortiumAuthority',
+                action: h.stage,
+                comments: h.comments,
+                signature: h.signature,
+                requestId: reqObj.requestId,
+                studentId: reqObj.studentId,
+                studentName: reqObj.studentName
+              }
+            }));
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    // Agent Intent Engine Fallback (supports simulated / SIS / mock records e.g. CERT-101)
+    if (history.length === 0) {
+      try {
+        const fallbackData = await fetchCertHistory(rawKey) || (candidates[0] ? await fetchCertHistory(candidates[0]) : null);
+        if (fallbackData && Array.isArray(fallbackData.history) && fallbackData.history.length > 0) {
+          resolvedKey = fallbackData.certId || rawKey;
+          history = fallbackData.history.map((h, idx) => ({
+            txId: h.txId || `tx_${idx + 1}`,
+            timestamp: h.timestamp || fallbackData.timestamp,
+            isDelete: false,
+            value: {
+              status: h.status,
+              stage: h.status,
+              actor: h.actor || fallbackData.actor,
+              org: h.org || fallbackData.org,
+              action: h.action || h.status,
+              comments: h.comments,
+              requestId: fallbackData.certId || rawKey,
+              studentId: fallbackData.studentId,
+              studentName: fallbackData.studentName
+            }
+          }));
+        }
+      } catch (e) {}
     }
 
     let linkedRequestKey = null;
@@ -2351,6 +2415,20 @@ app.get('/api/events', (req, res) => {
     removeListener();
     res.end();
   });
+});
+
+// Group 5: Manual & Triggered Event Dispatcher (for live demonstration & tests)
+app.post('/api/events/emit', (req, res) => {
+  const body = req.body || {};
+  const eventPayload = {
+    certId: body.certId || 'CERT-2024-001',
+    status: body.status || 'HOD_APPROVED',
+    actor: body.actor || 'hod.org1',
+    org: body.org || 'Org1MSP',
+    txId: body.txId || ('tx_' + Math.random().toString(16).slice(2, 10))
+  };
+  emitLocalEvent(eventPayload);
+  res.json({ success: true, emitted: eventPayload });
 });
 
 // ============================================================================
