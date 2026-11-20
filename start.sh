@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #
 # Master Startup Script for 3-Organization Academic Blockchain PBL System
-# Compatible with macOS (Apple Silicon / Intel) and Ubuntu Linux.
+# Compatible with macOS (Apple Silicon / Intel), Ubuntu Linux, and Windows (Git Bash/WSL).
 
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DIR"
 
 echo "========================================================="
 echo " 🎓 Academic Blockchain PBL — 3-Organization Architecture "
@@ -21,7 +22,7 @@ fi
 # 2. Bring up Fabric 3-Org Network, Channel, and Chaincode
 echo ""
 echo "--> [Step 1/3] Bringing up Fabric 3-Org Network & IPFS..."
-bash "${DIR}/network/network.sh" up
+bash network/network.sh up
 
 # 3. Build & Launch Backend API and Web Portal Containers
 echo ""

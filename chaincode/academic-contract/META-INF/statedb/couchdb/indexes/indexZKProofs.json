@@ -1,0 +1,7 @@
+{
+  "index": {
+    "fields": ["docType", "studentId", "claimedThreshold", "timestamp"]
+  },
+  "name": "indexZKProofs",
+  "type": "json"
+}

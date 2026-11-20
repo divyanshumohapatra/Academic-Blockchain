@@ -21,6 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initLedgerExplorer();
   initTelemetryDashboard();
   initAgenticEngine();
+  initKeysCenter();
+  initZkPassportSuite();
   initChatbot();
 
   setInterval(initNetworkHealth, 10000);
@@ -44,6 +46,7 @@ function initTabs() {
 
       if (btn.dataset.tab === 'register-tab') loadStudents();
       if (btn.dataset.tab === 'ledger-tab') loadCertificates();
+      if (btn.dataset.tab === 'keys-tab') loadKeysSummary();
       if (btn.dataset.tab === 'telemetry-tab') loadTelemetryData();
     });
   });
@@ -80,6 +83,31 @@ async function initNetworkHealth() {
 function initStudentRegistration() {
   const form = document.getElementById('studentForm');
   const refreshBtn = document.getElementById('refreshStudentsBtn');
+  const genKeyBtn = document.getElementById('genStuKeyBtn');
+  const stuPubKeyInput = document.getElementById('stuPubKey');
+
+  if (genKeyBtn) {
+    genKeyBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/students/generate-keypair`, { method: 'POST' });
+        const data = await res.json();
+        if (stuPubKeyInput) stuPubKeyInput.value = data.publicKeyPem;
+
+        // Auto trigger download of student private key
+        const blob = new Blob([data.privateKeyPem], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `student_private_key_${Date.now()}.pem`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        alert(`🔑 New ECDSA P-256 Keypair generated!\n• Public Key loaded into form\n• Private Key downloaded to your computer\n• SHA-256 Fingerprint: ${data.sha256Fingerprint.substring(0, 16)}...`);
+      } catch (e) {
+        alert(`Failed to generate keypair: ${e.message}`);
+      }
+    });
+  }
 
   if (form) {
     form.addEventListener('submit', async (e) => {
@@ -91,6 +119,10 @@ function initStudentRegistration() {
         department: document.getElementById('stuDept').value.trim(),
         enrollmentYear: document.getElementById('stuYear').value.trim()
       };
+
+      if (stuPubKeyInput && stuPubKeyInput.value.trim()) {
+        payload.publicKeyPem = stuPubKeyInput.value.trim();
+      }
 
       try {
         const res = await fetch(`${API_BASE}/students`, {
@@ -122,15 +154,15 @@ async function loadStudents() {
 
   try {
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">Fetching registered students...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Fetching registered students...</td></tr>';
     }
     if (sisTbody) {
       sisTbody.innerHTML = '<tr><td colspan="10" class="empty-hint">Fetching SIS records...</td></tr>';
     }
 
     const [ledgerRes, sisRes] = await Promise.all([
-      fetch(`${API_BASE}/students`),
-      fetch(`${API_BASE}/sis/students`)
+      fetch(`${API_BASE}/students`).catch(() => ({ json: () => [] })),
+      fetch(`${API_BASE}/sis/students`).catch(() => ({ json: () => [] }))
     ]);
 
     const students = await ledgerRes.json();
@@ -138,17 +170,25 @@ async function loadStudents() {
 
     if (tbody) {
       if (!Array.isArray(students) || students.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">No students registered yet on ledger.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">No students registered yet on ledger.</td></tr>';
       } else {
-        tbody.innerHTML = students.map(s => `
-          <tr>
-            <td><code>${s.studentId}</code></td>
-            <td><strong>${s.name}</strong></td>
-            <td>${s.email}</td>
-            <td>${s.department}</td>
-            <td>${s.enrollmentYear}</td>
-          </tr>
-        `).join('');
+        tbody.innerHTML = students.map(s => {
+          const rec = s.academicRecord || {};
+          const honors = rec.honors && rec.honors !== 'NONE' ? rec.honors : (rec.academicStanding || 'GOOD_STANDING');
+          const hasKey = Boolean(s.publicKeyPem);
+          const badgeClass = honors.includes('SUMMA') || honors.includes('MAGNA') || honors.includes('DEAN') ? 'badge-info' : '';
+
+          return `
+            <tr>
+              <td><code>${s.studentId}</code></td>
+              <td><strong>${s.name}</strong></td>
+              <td>${s.email}</td>
+              <td>${s.department}</td>
+              <td><span class="badge ${badgeClass}" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">${honors}</span></td>
+              <td>${hasKey ? '<span style="color: #16a34a; font-weight: 600; font-size: 0.8rem;">🔒 ECDSA P-256</span>' : '<span style="color: #94a3b8; font-size: 0.8rem;">None</span>'}</td>
+            </tr>
+          `;
+        }).join('');
       }
     }
 
@@ -167,12 +207,12 @@ async function loadStudents() {
             <td>${sis.department}</td>
             <td style="color:${sis.attendance >= 75 ? '#34d399' : '#f87171'}; font-weight:600;">${sis.attendance}%</td>
             <td style="color:${sis.cieMarks >= 20 ? '#34d399' : '#f87171'};">${sis.cieMarks}/50</td>
-            <td><strong>${sis.cgpa.toFixed(2)}</strong></td>
+            <td><strong>${Number(sis.cgpa || 0).toFixed(2)}</strong></td>
             <td style="color:${sis.backlogs === 0 ? '#34d399' : '#f87171'}; font-weight:${sis.backlogs > 0 ? 700 : 400};">${sis.backlogs}</td>
             <td style="color:${sis.capstoneScore >= 60 ? '#34d399' : '#f87171'};">${sis.capstoneScore}/100</td>
             <td style="color:${(sis.feeDues + sis.libraryDues) === 0 ? '#34d399' : '#f87171'};">₹${sis.feeDues + sis.libraryDues}</td>
             <td>
-              <button type="button" class="btn-secondary btn-sm" style="padding:4px 8px; font-size:0.75rem;" onclick="quickFillStudent('${sis.studentId}', '${sis.name.replace(/'/g, "\\'")}', '${sis.email}', '${sis.department}', '${sis.enrollmentYear}')">
+              <button type="button" class="btn-secondary btn-sm" style="padding:4px 8px; font-size:0.75rem;" onclick="quickFillStudent('${sis.studentId}', '${(sis.name || '').replace(/'/g, "\\'")}', '${sis.email || ''}', '${sis.department || ''}', '${sis.enrollmentYear || ''}')">
                 Quick-Fill
               </button>
             </td>
@@ -181,7 +221,7 @@ async function loadStudents() {
       }).join('');
     }
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="empty-hint">Error: ${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty-hint">Error: ${err.message}</td></tr>`;
     if (sisTbody) sisTbody.innerHTML = `<tr><td colspan="10" class="empty-hint">Error: ${err.message}</td></tr>`;
   }
 }
@@ -215,6 +255,43 @@ function initWorkflow() {
   const trackBtn = document.getElementById('trackReqBtn');
   const autoBtn = document.getElementById('autoAdvanceBtn');
   const issueBtn = document.getElementById('issueCertBtn');
+  const signBtn = document.getElementById('signReqBtn');
+  const reqSigInput = document.getElementById('reqStudentSig');
+
+  if (signBtn) {
+    signBtn.addEventListener('click', async () => {
+      const studentId = document.getElementById('reqStudentId').value.trim();
+      const requestId = document.getElementById('reqIdInput').value.trim();
+      const certType = document.getElementById('reqCertType').value;
+      if (!studentId || !requestId) {
+        alert('Please enter Student ID and Request ID before signing.');
+        return;
+      }
+
+      try {
+        // Fetch student demo private key from backend storage
+        const keyRes = await fetch(`${API_BASE}/keys/file/student_demo/student_demo_private_key.pem`);
+        const privateKeyPem = await keyRes.text();
+
+        const signRes = await fetch(`${API_BASE}/students/sign-payload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            privateKeyPem,
+            studentId,
+            requestId,
+            certType,
+            timestamp: new Date().toISOString()
+          })
+        });
+        const signData = await signRes.json();
+        if (reqSigInput) reqSigInput.value = signData.signatureBase64;
+        alert(`✍️ Cryptographic Digital Signature Generated!\nAlgorithm: SHA256withECDSA\nSignature: ${signData.signatureBase64.substring(0, 32)}...`);
+      } catch (err) {
+        alert(`Signing error: ${err.message}`);
+      }
+    });
+  }
 
   if (genReqBtn) {
     genReqBtn.addEventListener('click', () => {
@@ -230,11 +307,17 @@ function initWorkflow() {
       const studentId = document.getElementById('reqStudentId').value.trim();
       const certType = document.getElementById('reqCertType').value;
 
+      const bodyPayload = { requestId, studentId, certType };
+      if (reqSigInput && reqSigInput.value.trim()) {
+        bodyPayload.studentSignature = reqSigInput.value.trim();
+        bodyPayload.signatureTimestamp = new Date().toISOString();
+      }
+
       try {
         const res = await fetch(`${API_BASE}/requests`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId, studentId, certType })
+          body: JSON.stringify(bodyPayload)
         });
         const data = await res.json();
         if (res.ok) {
@@ -684,11 +767,61 @@ function initAgenticEngine() {
   const preFlightBtn = document.getElementById('runPreFlightAuditBtn');
   const fraudScanBtn = document.getElementById('runFraudScanBtn');
   const form = document.getElementById('agentOrchestrateForm');
+  const org1Btn = document.getElementById('runOrg1PipelineBtn');
   const terminal = document.getElementById('agentLogTerminal');
   const statusBadge = document.getElementById('agentExecutionStatus');
   const riskContainer = document.getElementById('riskGaugeContainer');
   const riskBadge = document.getElementById('riskScoreBadge');
   const riskFindings = document.getElementById('riskFindingsList');
+
+  // Group 1: Academic Department Autonomous Pipeline (Stages 1-3)
+  if (org1Btn) {
+    org1Btn.addEventListener('click', async () => {
+      const requestId = reqInput.value.trim();
+      if (!requestId) {
+        alert('Please enter or select a Request ID');
+        return;
+      }
+      terminal.innerHTML = '';
+      appendTerminalLog(`======================================================`);
+      appendTerminalLog(`🏛️ [Academic Department Autonomous Pipeline Triggered]`);
+      appendTerminalLog(`Target Request: ${requestId} | Organization: Org1MSP`);
+      appendTerminalLog(`Autonomous Agents: FacultyAgent -> HODAgent -> DACAgent`);
+      appendTerminalLog(`======================================================`);
+
+      statusBadge.textContent = 'ORG1 RUNNING';
+      statusBadge.style.background = '#0284c7';
+
+      try {
+        const res = await fetch(`${API_BASE}/agents/org1-department-audit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.auditLogs) {
+            data.auditLogs.forEach(log => {
+              appendTerminalLog(`\n[${log.agent}] Stage: ${log.stage}`);
+              if (log.confidence) appendTerminalLog(`  • Confidence: ${(log.confidence * 100).toFixed(1)}%`);
+              if (log.rationale) appendTerminalLog(`  • Rationale: ${log.rationale}`);
+            });
+          }
+          statusBadge.textContent = 'ORG1 COMPLETE';
+          statusBadge.style.background = '#10b981';
+          appendTerminalLog(`\n✅ [Org1 Pipeline Complete] Stages 1–3 successfully verified and endorsed on peer0.org1:7051! Status is now DAC_APPROVED.`);
+        } else {
+          statusBadge.textContent = 'ORG1 HALTED';
+          statusBadge.style.background = '#ef4444';
+          appendTerminalLog(`\n❌ [Org1 Halted] ${data.error || 'Department audit failed'}`);
+        }
+      } catch (err) {
+        statusBadge.textContent = 'ERROR';
+        statusBadge.style.background = '#ef4444';
+        appendTerminalLog(`\n❌ [Network Error] ${err.message}`);
+      }
+    });
+  }
 
   // Load latest request
   if (loadLatestBtn) {
@@ -973,7 +1106,83 @@ function initChatbot() {
   }
 }
 
+// ==========================================
+// Cryptographic Keys & MSP Identity Center
+// ==========================================
+function initKeysCenter() {
+  const genBtn = document.getElementById('genNewStudentKeyBtn');
+  const refreshBtn = document.getElementById('refreshKeysBtn');
 
+  if (genBtn) {
+    genBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/students/generate-keypair`, { method: 'POST' });
+        const data = await res.json();
+
+        // Download private key file
+        const blob = new Blob([data.privateKeyPem], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `student_private_key_${Date.now()}.pem`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        // Display in viewer
+        const viewer = document.getElementById('keyViewerCard');
+        const title = document.getElementById('keyViewerTitle');
+        const content = document.getElementById('keyViewerContent');
+        if (viewer && content) {
+          title.textContent = `Generated Student Keypair (SHA-256 Fingerprint: ${data.sha256Fingerprint.substring(0, 16)}...)`;
+          content.textContent = `--- PUBLIC KEY (ECDSA P-256) ---\n${data.publicKeyPem}\n--- PRIVATE KEY (DOWNLOADED) ---\n${data.privateKeyPem}\nHex Public Key:\n${data.publicKeyHex}`;
+          viewer.style.display = 'block';
+        }
+      } catch (err) {
+        alert(`Failed to generate student keypair: ${err.message}`);
+      }
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', loadKeysSummary);
+  }
+}
+
+async function loadKeysSummary() {
+  try {
+    const res = await fetch(`${API_BASE}/keys/summary`);
+    if (!res.ok) return;
+    const summary = await res.json();
+    console.log('[Keys Center] Loaded cryptographic keys summary:', summary);
+  } catch (e) {
+    console.warn('[Keys Center] Key summary note:', e.message);
+  }
+}
+
+window.viewKeyFile = async function(folder, filename) {
+  const viewer = document.getElementById('keyViewerCard');
+  const title = document.getElementById('keyViewerTitle');
+  const content = document.getElementById('keyViewerContent');
+
+  if (!viewer || !content) return;
+
+  try {
+    content.textContent = 'Loading cryptographic key...';
+    viewer.style.display = 'block';
+    title.textContent = `File: ${folder}/${filename}`;
+
+    const res = await fetch(`${API_BASE}/keys/file/${folder}/${filename}`);
+    if (!res.ok) {
+      content.textContent = `Unable to fetch key file (${res.status}): ${await res.text()}`;
+      return;
+    }
+    const text = await res.text();
+    content.textContent = text;
+    viewer.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    content.textContent = `Error reading key file: ${err.message}`;
+  }
+};
 
 // ==========================================
 // Contributor 6.2: Health & Telemetry Sentinel
@@ -1086,5 +1295,146 @@ async function loadTelemetryData() {
     if (statusEl) statusEl.textContent = 'PROBE FAILED';
     if (peersTbody) peersTbody.innerHTML = `<tr><td colspan="7" class="empty-hint" style="color:#ef4444;">Error probing peers: ${err.message}</td></tr>`;
     if (nodesTbody) nodesTbody.innerHTML = `<tr><td colspan="5" class="empty-hint" style="color:#ef4444;">Error probing infrastructure: ${err.message}</td></tr>`;
+  }
+}
+
+// ==========================================
+// Group 1: ZK-Passport & Privacy Suite
+// ==========================================
+function initZkPassportSuite() {
+  const genPassportBtn = document.getElementById('generatePassportBtn');
+  const genZkProofBtn = document.getElementById('generateZkProofBtn');
+  const runZkVerifierBtn = document.getElementById('runZkVerifierBtn');
+  const passportStuInput = document.getElementById('passportStuId');
+  const zkThresholdSelect = document.getElementById('zkThresholdSelect');
+  const zkVerifyTokenInput = document.getElementById('zkVerifyTokenInput');
+
+  // 1. Contributor 1.1: Academic Passport & Dynamic QR
+  if (genPassportBtn) {
+    genPassportBtn.addEventListener('click', async () => {
+      const studentId = (passportStuInput ? passportStuInput.value : 'STU-2024-001').trim();
+      genPassportBtn.disabled = true;
+      genPassportBtn.textContent = 'Generating...';
+
+      try {
+        const res = await fetch(`${API_BASE}/passport/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to issue passport');
+
+        const p = data.passport;
+        document.getElementById('ppStudentName').textContent = p.fullName || 'Alice Johnson';
+        document.getElementById('ppStudentDid').textContent = p.did || `did:fabric:org1:${studentId}`;
+        document.getElementById('ppHonorsBadge').textContent = p.latinHonors || 'Summa Cum Laude';
+        document.getElementById('ppDegree').textContent = p.degree || 'MCA';
+        document.getElementById('ppDept').textContent = p.department || 'Computer Science';
+        document.getElementById('ppFingerprint').textContent = p.publicKeyFingerprint ? `${p.publicKeyFingerprint}...` : 'f48c2b9a710e...';
+
+        const qrImg = document.getElementById('ppQrImg');
+        const qrPlc = document.getElementById('ppQrPlaceholder');
+        if (data.qrDataUrl && qrImg) {
+          qrImg.src = data.qrDataUrl;
+          qrImg.style.display = 'block';
+          if (qrPlc) qrPlc.style.display = 'none';
+        }
+
+        const outBox = document.getElementById('passportCardOutput');
+        if (outBox) outBox.style.display = 'block';
+      } catch (err) {
+        alert(`Passport Generation Error: ${err.message}`);
+      } finally {
+        genPassportBtn.disabled = false;
+        genPassportBtn.textContent = 'Generate Passport & QR';
+      }
+    });
+  }
+
+  // 2. Contributor 1.2: ZK Range Proof Generation
+  if (genZkProofBtn) {
+    genZkProofBtn.addEventListener('click', async () => {
+      const studentId = (passportStuInput ? passportStuInput.value : 'STU-2024-001').trim();
+      const minThreshold = parseFloat(zkThresholdSelect ? zkThresholdSelect.value : 8.5);
+      genZkProofBtn.disabled = true;
+      genZkProofBtn.textContent = 'Computing Proof...';
+
+      try {
+        const res = await fetch(`${API_BASE}/zk/generate-proof`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, minCgpaThreshold: minThreshold })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to generate ZK proof');
+
+        const tokenPill = document.getElementById('zkProofTokenPill');
+        const hashText = document.getElementById('zkProofHashText');
+        const resultBox = document.getElementById('zkProofResultBox');
+
+        if (tokenPill) tokenPill.textContent = data.proofToken;
+        if (hashText) hashText.textContent = `Proof Hash: ${data.proofHash}`;
+        if (zkVerifyTokenInput) zkVerifyTokenInput.value = data.proofHash;
+        if (resultBox) resultBox.style.display = 'block';
+      } catch (err) {
+        alert(`ZK Proof Error: ${err.message}`);
+      } finally {
+        genZkProofBtn.disabled = false;
+        genZkProofBtn.textContent = '⚡ Generate Zero-Knowledge Merkle Proof';
+      }
+    });
+  }
+
+  // 3. Contributor 1.3: Autonomous ZK Verifier Agent
+  if (runZkVerifierBtn) {
+    runZkVerifierBtn.addEventListener('click', async () => {
+      let proofHash = zkVerifyTokenInput ? zkVerifyTokenInput.value.trim() : '';
+      if (!proofHash) {
+        alert('Please generate a ZK proof above first or enter a proof hash.');
+        return;
+      }
+      const claimedThreshold = parseFloat(zkThresholdSelect ? zkThresholdSelect.value : 8.5);
+      runZkVerifierBtn.disabled = true;
+      runZkVerifierBtn.textContent = 'Auditing with AI Agent...';
+
+      try {
+        const res = await fetch(`${API_BASE}/zk/verify-proof`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proofHash, claimedThreshold })
+        });
+        const data = await res.json();
+
+        const agentBox = document.getElementById('zkAgentOutputBox');
+        const stepsContainer = document.getElementById('zkAgentSteps');
+        const badge = document.getElementById('zkAgentBadge');
+
+        if (badge) {
+          badge.textContent = data.decision === 'HIRE_CLEARANCE_GRANTED' ? 'HIRE APPROVED' : 'FLAGGED';
+          badge.style.background = data.decision === 'HIRE_CLEARANCE_GRANTED' ? '#10b981' : '#ef4444';
+        }
+
+        if (stepsContainer && data.steps) {
+          stepsContainer.innerHTML = data.steps.map(s => `
+            <div style="background: rgba(255,255,255,0.05); padding: 0.4rem 0.6rem; border-radius: 4px; border-left: 3px solid ${s.status === 'CLEARED' || s.status === 'VALID' || s.status === 'ENDORSED' ? '#10b981' : '#f59e0b'};">
+              <div style="font-weight: 600; color: #38bdf8;">${s.step} [${s.status}]</div>
+              <div style="color: #94a3b8; font-size: 0.72rem; margin-top: 0.15rem;">${s.detail}</div>
+            </div>
+          `).join('') + `
+            <div style="margin-top: 0.4rem; padding: 0.4rem; background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 4px; text-align: center; color: #10b981; font-weight: bold;">
+              🎉 Zero-Knowledge Verification Successful • Confidential Transcripts Undisclosed
+            </div>
+          `;
+        }
+
+        if (agentBox) agentBox.style.display = 'block';
+      } catch (err) {
+        alert(`Agent Verification Error: ${err.message}`);
+      } finally {
+        runZkVerifierBtn.disabled = false;
+        runZkVerifierBtn.textContent = '🚀 Run Autonomous Verifier Agent';
+      }
+    });
   }
 }

@@ -1,0 +1,7 @@
+{
+  "index": {
+    "fields": ["docType", "studentId", "passportId", "status"]
+  },
+  "name": "indexAcademicPassport",
+  "type": "json"
+}

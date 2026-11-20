@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 #
 # Automated End-to-End Test for 3-Org Academic Blockchain System
-# Tests all 4 Modules via the REST API & Fabric Ledger:
-# - Module 1: Student Registration & Certificate Request
-# - Module 2: 7-Stage Approval Workflow State Machine
-# - Module 3: PDF Generation & IPFS Storage
-# - Module 4: Fabric 3-Org Ledger Commit, Verification & Revocation
 
 set -e
 

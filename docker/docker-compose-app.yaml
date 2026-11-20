@@ -35,6 +35,7 @@ services:
     container_name: frontend-portal
     environment:
       - PORT=3000
+      - PORT=3000
       - BACKEND_HOST=backend-api
       - BACKEND_PORT=4000
     volumes:

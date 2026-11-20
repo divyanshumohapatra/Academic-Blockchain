@@ -2,12 +2,27 @@
 
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config();
 try {
+  require('dotenv').config();
   require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 } catch (e) {}
 
-const axios = require('axios');
+let axios = null;
+try {
+  axios = require('axios');
+} catch (e) {
+  axios = {
+    post: async (url, data, config = {}) => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
+        body: JSON.stringify(data)
+      });
+      const resData = await res.json();
+      return { data: resData, status: res.status };
+    }
+  };
+}
 
 /**
  * Multi-Provider LLM Agent Client

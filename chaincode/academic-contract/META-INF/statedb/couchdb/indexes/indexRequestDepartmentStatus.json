@@ -1,0 +1,7 @@
+{
+  "index": {
+    "fields": ["docType", "department", "status"]
+  },
+  "name": "indexRequestDepartmentStatus",
+  "type": "json"
+}

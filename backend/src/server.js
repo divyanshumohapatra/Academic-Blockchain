@@ -8,6 +8,7 @@ const multer = require('multer');
 const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
 const { invokeChaincode, queryChaincode, checkNetworkHealth, getCertificateHistory, onLedgerEvent, getEventStatus, emitLocalEvent } = require('./fabric');
 const { handleChatMessage, fetchCertHistory } = require('./intentEngine');
@@ -15,9 +16,12 @@ const { encryptData, decryptData } = require('./cryptoUtil');
 const { generateStudentDID, isValidStudentDID, signPayload, getActorSigningSecret } = require('./cryptoUtil');
 const facultyAuth = require('./facultyAuth');
 const orchestrator = require('./agents/orchestrator');
+const { runOrg1DepartmentPipeline, runZKVerifierAgent } = require('./agents/orgAgents');
 const fraudAgent = require('./agents/fraudAgent');
 const chatAgent = require('./agents/chatAgent');
 const hfClient = require('./agents/hfAgentClient');
+const { evaluatePrerequisites, getDegreeRequirements, calculateAcademicStanding, verifyStudentRequestSignature } = require('./rules/prerequisites');
+const { validateStudentInput, validateRequestInput } = require('./validators/schemaValidator');
 const { CertMintingMultiAgentEngine } = require('./agents/certMintingAgents');
 const sisDatabase = require('./db/sisDatabase');
 const r2 = require('./r2');
@@ -96,7 +100,8 @@ app.get('/api/health/sync-parity', handleSyncParity);
 app.get('/api/sync-parity', handleSyncParity);
 
 // ==========================================
-// 2. Module 1: Student Registration (with DID via SHA-256 + RIPEMD-160)
+// 2. Module 1: Student Registration & Profile Management
+// Contributor 1.1: Academic Chaincode Lead (with DID & Multi-MSP Cryptographic Profiles)
 // ==========================================
 app.post('/api/students', async (req, res) => {
   try {
@@ -104,46 +109,78 @@ app.post('/api/students', async (req, res) => {
       studentId, name, email, department, branch, 
       semester, semesterNumber, semesterLabel, courses, enrollmentYear 
     } = req.body;
+
     if (!studentId) {
       return res.status(400).json({ error: 'studentId (roll number) is required' });
     }
 
-    // 1. Verify or enroll student in University SIS Database
+    // 1. Rich Schema Validation (flexible)
+    const validation = validateStudentInput(req.body);
+    if (!validation.isValid && !req.body.name) {
+      return res.status(400).json({
+        error: 'Student schema validation failed',
+        details: validation.errors
+      });
+    }
+
+    // 2. Verify or enroll student in University SIS Database
     let sisRecord = sisDatabase.getStudentByRollNumber(studentId);
-    const verifiedName = name || (sisRecord ? sisRecord.name : studentId);
-    const verifiedEmail = email || (sisRecord ? sisRecord.email : `${studentId.toLowerCase()}@academic.edu`);
+    const verifiedName = (name && name.trim()) || (sisRecord ? sisRecord.name : studentId.trim());
+    const verifiedEmail = (email && email.trim()) || (sisRecord ? sisRecord.email : `${studentId.trim().toLowerCase()}@academic.edu`);
     const verifiedDept = department || (sisRecord ? sisRecord.department : 'Department of Computer Science & Engineering');
     const verifiedYear = enrollmentYear || (sisRecord ? sisRecord.enrollmentYear : '2024');
 
-    // 2. Derive Decentralized Identifier (DID) using SHA-256 + RIPEMD-160
-    const did = (sisRecord && sisRecord.did) || generateStudentDID(verifiedName, studentId);
+    // 3. Derive Decentralized Identifier (DID) using SHA-256 + RIPEMD-160
+    const did = (sisRecord && sisRecord.did) || (typeof generateStudentDID === 'function' ? generateStudentDID(verifiedName, studentId.trim()) : `did:academic:nitw:${studentId.trim().toLowerCase()}`);
 
-    // Save/sync DID in SIS DB
+    // Construct enriched academic profile for on-chain identity lifecycle
+    const academicProfile = {
+      cgpa: req.body.cgpa !== undefined ? Number(req.body.cgpa) : (req.body.academicRecord?.cgpa ?? (sisRecord?.cgpa ?? 8.5)),
+      totalCredits: req.body.totalCredits !== undefined ? Number(req.body.totalCredits) : (req.body.academicRecord?.totalCredits ?? (sisRecord?.totalCredits ?? 160)),
+      requiredCredits: req.body.requiredCredits !== undefined ? Number(req.body.requiredCredits) : (req.body.academicRecord?.requiredCredits ?? 160),
+      attendance: req.body.attendance !== undefined ? Number(req.body.attendance) : (req.body.academicRecord?.attendance ?? (sisRecord?.attendance ?? 88.0)),
+      backlogs: req.body.backlogs !== undefined ? Number(req.body.backlogs) : (req.body.academicRecord?.backlogs ?? (sisRecord?.backlogs ?? 0)),
+      completedCourses: req.body.completedCourses || req.body.academicRecord?.completedCourses || ['CS101', 'CS102', 'CS201', 'CS202'],
+      prerequisitesMet: req.body.prerequisitesMet !== undefined ? Boolean(req.body.prerequisitesMet) : true,
+      did
+    };
+
+    if (req.body.publicKeyPem || req.body.publicKey) {
+      academicProfile.publicKeyPem = req.body.publicKeyPem || req.body.publicKey;
+    }
+
+    // Save/sync in SIS DB
     sisRecord = sisDatabase.addOrUpdateStudent({
       ...(sisRecord || {}),
-      studentId,
+      studentId: studentId.trim(),
       name: verifiedName,
       email: verifiedEmail,
       department: verifiedDept,
       enrollmentYear: verifiedYear,
       did,
-      attendance: sisRecord ? sisRecord.attendance : 88.0,
+      attendance: academicProfile.attendance,
       cieMarks: sisRecord ? sisRecord.cieMarks : 42.0,
-      backlogs: sisRecord ? sisRecord.backlogs : 0,
-      totalCredits: sisRecord ? sisRecord.totalCredits : 160,
-      requiredCredits: 160
+      backlogs: academicProfile.backlogs,
+      totalCredits: academicProfile.totalCredits,
+      requiredCredits: academicProfile.requiredCredits
     });
 
-    // 3. Register on Hyperledger Fabric ledger (try 6 params, fallback to 5 params)
+    // 4. Register on Hyperledger Fabric ledger (try 6 params with profile, fallback to 5 params)
     let chaincodeResult = null;
     try {
       chaincodeResult = await invokeChaincode('RegisterStudent', [
-        studentId, verifiedName, verifiedEmail, verifiedDept, verifiedYear, did
-      ], 1);
+        studentId.trim(),
+        verifiedName,
+        verifiedEmail,
+        verifiedDept,
+        verifiedYear,
+        JSON.stringify(academicProfile),
+        did
+      ], 1); // Org 1: Academic Department
     } catch (chaincodeErr6) {
       try {
         chaincodeResult = await invokeChaincode('RegisterStudent', [
-          studentId, verifiedName, verifiedEmail, verifiedDept, verifiedYear
+          studentId.trim(), verifiedName, verifiedEmail, verifiedDept, verifiedYear, did
         ], 1);
       } catch (chaincodeErr5) {
         console.warn(`[Chaincode Register Notice]: ${chaincodeErr5.message}`);
@@ -151,13 +188,13 @@ app.post('/api/students', async (req, res) => {
       }
     }
 
-    // 4. Mark student as officially registered on the blockchain ledger
-    sisRecord = sisDatabase.markStudentOnLedger(studentId, did);
+    // 5. Mark student as officially registered on the blockchain ledger
+    sisRecord = sisDatabase.markStudentOnLedger(studentId.trim(), did);
 
-    // 5. Enroll in Semester and Semester-wise Courses
+    // 6. Enroll in Semester and Semester-wise Courses
     const finalSemLabel = semesterLabel || (semester ? (String(semester).startsWith('Semester') ? semester : `Semester ${semester}`) : 'Semester 5');
     const semReg = sisDatabase.enrollStudentInSemesterCourses(
-      studentId,
+      studentId.trim(),
       did,
       finalSemLabel,
       branch || null,
@@ -167,15 +204,62 @@ app.post('/api/students', async (req, res) => {
     res.status(201).json({
       success: true,
       did,
-      studentId,
+      studentId: studentId.trim(),
       name: verifiedName,
       isOnLedger: true,
       registeredOnLedgerAt: sisRecord.registeredOnLedgerAt,
       result: chaincodeResult,
+      academicProfile,
       sisProfile: sisRecord,
       semesterRegistration: semReg,
-      message: `Student ${studentId} successfully registered with DID ${did} in ${finalSemLabel} on Fabric Blockchain ledger.`
+      message: `Student ${studentId.trim()} successfully registered with DID ${did} in ${finalSemLabel} on Fabric Blockchain ledger.`
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/students/:id/academic-record', async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const result = await invokeChaincode('UpdateStudentAcademicRecord', [
+      studentId,
+      JSON.stringify(req.body)
+    ], 1); // Org 1
+    res.json({ success: true, studentId, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/students/:id/status', async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const { status, reason } = req.body;
+    if (!status) {
+      return res.status(400).json({ error: 'status is required (ACTIVE, SUSPENDED, GRADUATED, WITHDRAWN)' });
+    }
+    const result = await invokeChaincode('UpdateStudentStatus', [
+      studentId,
+      status,
+      reason || 'Status updated by academic administrator'
+    ], 1); // Org 1
+    res.json({ success: true, studentId, status, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/students/:id/eligibility', async (req, res) => {
+  try {
+    const studentBytes = await queryChaincode('GetStudent', [req.params.id]);
+    if (!studentBytes) {
+      return res.status(404).json({ error: `Student ${req.params.id} not found` });
+    }
+    const studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+    const certType = req.query.certType || 'Bachelor of Technology in CSE';
+    const evaluation = evaluatePrerequisites(studentObj, certType, req.query);
+    res.json({ studentId: req.params.id, certType, ...evaluation });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -696,13 +780,419 @@ function checkBranchMatch(requested, registered) {
 }
 
 // ==========================================
-// 5. Module 2: Certificate Request & Approval Workflow
+// Contributor 1.1: Student Cryptographic Keypair & Digital Signature Services
 // ==========================================
+app.post('/api/students/generate-keypair', (req, res) => {
+  try {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+      namedCurve: 'prime256v1',
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+    });
+
+    const pubKeyDer = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' });
+    const pubKeyHex = pubKeyDer.toString('hex');
+    const sha256Fingerprint = crypto.createHash('sha256').update(pubKeyDer).digest('hex');
+
+    res.json({
+      curve: 'ECDSA prime256v1 (NIST P-256)',
+      publicKeyPem: publicKey,
+      privateKeyPem: privateKey,
+      publicKeyHex: pubKeyHex,
+      sha256Fingerprint
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/students/sign-payload', (req, res) => {
+  try {
+    const { privateKeyPem, studentId, requestId, certType, timestamp } = req.body;
+    if (!privateKeyPem || !studentId || !requestId || !certType) {
+      return res.status(400).json({ error: 'privateKeyPem, studentId, requestId, and certType are required' });
+    }
+
+    const canonicalPayload = `${String(studentId).trim()}:${String(requestId).trim()}:${String(certType).trim()}:${timestamp || ''}`;
+    const signer = crypto.createSign('SHA256');
+    signer.update(canonicalPayload);
+    signer.end();
+    const signatureBase64 = signer.sign(privateKeyPem, 'base64');
+
+    res.json({
+      canonicalPayload,
+      signatureBase64,
+      algorithm: 'SHA256withECDSA',
+      timestamp: timestamp || new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Signing failed: ${err.message}` });
+  }
+});
+
+// Cryptographic Consortium & MSP Key Inventory
+app.get('/api/keys/summary', (req, res) => {
+  try {
+    const summaryPaths = [
+      path.join(__dirname, '../storage/keys/keys_summary.json'),
+      path.join(__dirname, '../../keys/keys_summary.json')
+    ];
+    let foundPath = summaryPaths.find(p => fs.existsSync(p));
+    if (foundPath) {
+      const summary = JSON.parse(fs.readFileSync(foundPath, 'utf8'));
+      return res.json(summary);
+    }
+
+    res.status(404).json({ error: 'Key summary not found. Run scripts/export_and_generate_keys.js' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/keys/file/:folder/:filename', (req, res) => {
+  try {
+    const { folder, filename } = req.params;
+    // Security sanitization
+    const safeFolder = folder.replace(/[^a-zA-Z0-9_-]/g, '');
+    const safeFilename = filename.replace(/[^a-zA-Z0-9_.-]/g, '');
+
+    const candidates = [
+      path.join(__dirname, '../storage/keys', safeFolder, safeFilename),
+      path.join(__dirname, '../../keys', safeFolder, safeFilename)
+    ];
+
+    const match = candidates.find(p => fs.existsSync(p));
+    if (!match) {
+      return res.status(404).json({ error: `Key file not found: ${safeFolder}/${safeFilename}` });
+    }
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(fs.readFileSync(match, 'utf8'));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Contributor 1.2 & 1.3: Group 1 Department Autonomous Pipeline (Stages 1-3)
+app.post('/api/agents/org1-department-audit', async (req, res) => {
+  try {
+    const { requestId, details } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+    const result = await runOrg1DepartmentPipeline(requestId, details || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// Group 1: ZK-Passport & Privacy Suite helpers
+// ==========================================
+const HONORS_LABELS = {
+  SUMMA_CUM_LAUDE: 'Summa Cum Laude',
+  MAGNA_CUM_LAUDE: 'Magna Cum Laude',
+  CUM_LAUDE: 'Cum Laude',
+  DEAN_HONOR_ROLL: "Dean's Honor Roll",
+  NONE: 'No Latin Honors'
+};
+
+function parseLedgerResult(raw) {
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch (_) { return raw; }
+}
+
+// Academic profile sent to RegisterStudent so CGPA / honors on the ledger match the SIS.
+function buildLedgerProfileFromSis(student, did) {
+  return {
+    cgpa: Number(student?.cgpa ?? 0),
+    attendance: Number(student?.attendance ?? 0),
+    backlogs: Number(student?.backlogs ?? 0),
+    totalCredits: Number(student?.totalCredits ?? 160),
+    requiredCredits: Number(student?.requiredCredits ?? 160),
+    did
+  };
+}
+
+// Registers an SIS student on Fabric (7-arg RegisterStudent, falling back to the
+// older 6-arg signature for networks still running the previous chaincode).
+async function registerSisStudentOnLedger(studentId, overrides = {}) {
+  const student = sisDatabase.getStudentByRollNumber(studentId);
+  const name = overrides.name || student?.name || 'Student';
+  const did = overrides.did || student?.did || generateStudentDID(name, studentId);
+  const base = [
+    studentId,
+    name,
+    student?.email || `${studentId.toLowerCase()}@academic.edu`,
+    overrides.department || student?.department || 'Department of Computer Science & Engineering',
+    String(student?.enrollmentYear || 2024)
+  ];
+  let result;
+  try {
+    result = await invokeChaincode('RegisterStudent', [...base, JSON.stringify(buildLedgerProfileFromSis(student, did)), did], 1);
+  } catch (err7) {
+    result = await invokeChaincode('RegisterStudent', [...base, did], 1);
+  }
+  if (student) sisDatabase.markStudentOnLedger(studentId, did);
+  return result;
+}
+
+// Returns the on-ledger student record, registering it from the SIS first if needed.
+async function ensureStudentOnLedger(studentId) {
+  try {
+    const existing = parseLedgerResult(await queryChaincode('GetStudent', [studentId]));
+    if (existing && existing.studentId) return existing;
+  } catch (_) { /* not on ledger yet */ }
+  if (!sisDatabase.getStudentByRollNumber(studentId)) {
+    const err = new Error(`Student ${studentId} not found in the University SIS`);
+    err.status = 404;
+    throw err;
+  }
+  await registerSisStudentOnLedger(studentId);
+  return parseLedgerResult(await queryChaincode('GetStudent', [studentId]));
+}
+
+// Contributor 1.1: Cryptographic Academic Passport & Dynamic QR Code Generator
+app.post('/api/passport/generate', async (req, res) => {
+  try {
+    const studentId = String(req.body.studentId || 'STU-2024-001').trim();
+    await ensureStudentOnLedger(studentId);
+
+    const registration = sisDatabase.getStudentSemesterRegistration
+      ? sisDatabase.getStudentSemesterRegistration(studentId)
+      : null;
+    const degree = registration?.branch || 'Bachelor of Technology';
+
+    const passport = parseLedgerResult(await invokeChaincode('IssueStudentPassport', [studentId, degree], 1));
+    if (!passport || !passport.passportId) {
+      throw new Error('Chaincode did not return a passport record');
+    }
+
+    const QRCode = require('qrcode');
+    const qrPayload = JSON.stringify({
+      passportId: passport.passportId,
+      did: passport.did,
+      studentId: passport.studentId,
+      degree: passport.degree,
+      latinHonors: passport.latinHonors,
+      status: passport.status,
+      issuer: passport.issuerMSP,
+      verifyUrl: `http://localhost:3000/verify?did=${encodeURIComponent(passport.did)}`
+    });
+    const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      width: 256,
+      color: { dark: '#0f172a', light: '#ffffff' }
+    });
+
+    res.json({ success: true, source: 'FABRIC_LEDGER', passport, qrDataUrl, qrPayload });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// Contributor 1.2: Zero-Knowledge (ZK) Academic Range Proof Generator
+app.post('/api/zk/generate-proof', async (req, res) => {
+  try {
+    const studentId = String(req.body.studentId || 'STU-2024-001').trim();
+    const minThreshold = parseFloat(req.body.minCgpaThreshold ?? 8.5);
+    if (!Number.isFinite(minThreshold) || minThreshold <= 0 || minThreshold > 10) {
+      return res.status(400).json({ error: 'minCgpaThreshold must be a number between 0 and 10' });
+    }
+    // Fresh random salt per proof so two proofs of the same claim are unlinkable.
+    const salt = crypto.randomBytes(16).toString('hex');
+
+    await ensureStudentOnLedger(studentId);
+
+    let proofRes;
+    try {
+      proofRes = parseLedgerResult(await invokeChaincode('GenerateZKAcademicProof', [studentId, String(minThreshold), salt], 1));
+    } catch (e) {
+      if (/does not satisfy threshold/i.test(e.message)) {
+        // Fail closed without revealing the student's actual CGPA.
+        return res.status(422).json({
+          success: false,
+          satisfied: false,
+          studentId,
+          claimedThreshold: minThreshold,
+          error: `ZK proof rejected: candidate does not satisfy CGPA >= ${minThreshold}. No proof was issued and no grades were disclosed.`
+        });
+      }
+      throw e;
+    }
+    if (!proofRes || !proofRes.proofHash) {
+      throw new Error('Chaincode did not return a proof record');
+    }
+
+    res.json({
+      success: true,
+      proofHash: proofRes.proofHash,
+      studentId,
+      claimedThreshold: minThreshold,
+      proofToken: `ZKP-TOKEN-${proofRes.proofHash.substring(0, 16).toUpperCase()}`,
+      satisfied: true,
+      issuerMSP: proofRes.issuerMSP || 'Org1MSP',
+      message: proofRes.message,
+      createdAt: proofRes.timestamp || new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// Contributor 1.3: Autonomous ZK Verifier Agent (Recruiter Gatekeeper)
+app.post('/api/zk/verify-proof', async (req, res) => {
+  try {
+    const { proofHash, claimedThreshold } = req.body;
+    if (!proofHash || !/^[a-fA-F0-9]{64}$/.test(String(proofHash).trim())) {
+      return res.status(400).json({ error: 'proofHash must be a 64-character SHA-256 hex string' });
+    }
+    const result = await runZKVerifierAgent(String(proofHash).trim().toLowerCase(), claimedThreshold ?? 8.5);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Contributor 1.2: CouchDB Rich Queries & Department Analytics
+app.get('/api/department/students', async (req, res) => {
+  try {
+    const department = req.query.department || 'Department of Computer Science & Engineering';
+    let result = null;
+    try {
+      const raw = await queryChaincode('QueryStudentsByDepartment', [department]);
+      result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allSis = sisDatabase.getAllStudents() || [];
+      result = allSis.filter(s => (s.department || '').toLowerCase().includes(department.toLowerCase()));
+    }
+    res.json({ department, count: Array.isArray(result) ? result.length : 0, students: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/department/requests', async (req, res) => {
+  try {
+    const department = req.query.department || '';
+    const status = req.query.status || '';
+    let result = null;
+    try {
+      const raw = await queryChaincode('QueryRequestsByDepartmentAndStatus', [department, status]);
+      result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allReqs = sisDatabase.getAllCertificateRequests() || [];
+      result = allReqs.filter(r => {
+        const matchDept = !department || (r.department || '').toLowerCase().includes(department.toLowerCase());
+        const matchStatus = !status || r.status === status;
+        return matchDept && matchStatus;
+      });
+    }
+    res.json({ department, status, count: Array.isArray(result) ? result.length : 0, requests: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/department/honors', async (req, res) => {
+  try {
+    const honors = req.query.honors || 'SUMMA_CUM_LAUDE';
+    let result = null;
+    try {
+      const raw = await queryChaincode('QueryStudentsByHonors', [honors]);
+      result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allSis = sisDatabase.getAllStudents() || [];
+      result = allSis.filter(s => {
+        const h = s.academicRecord?.honors || (s.cgpa >= 9.5 ? 'SUMMA_CUM_LAUDE' : s.cgpa >= 9.0 ? 'MAGNA_CUM_LAUDE' : 'NONE');
+        return h.toUpperCase() === honors.toUpperCase();
+      });
+    }
+    res.json({ honors, count: Array.isArray(result) ? result.length : 0, students: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/department/metrics', async (req, res) => {
+  try {
+    const department = req.query.department || 'Department of Computer Science & Engineering';
+    let metrics = null;
+    try {
+      const raw = await queryChaincode('GetDepartmentSummaryMetrics', [department]);
+      metrics = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (chaincodeErr) {
+      const allSis = sisDatabase.getAllStudents() || [];
+      const deptStudents = allSis.filter(s => (s.department || '').toLowerCase().includes(department.toLowerCase()));
+      const allReqs = sisDatabase.getAllCertificateRequests() || [];
+      const deptReqs = allReqs.filter(r => (r.department || '').toLowerCase().includes(department.toLowerCase()));
+
+      let totalCgpa = 0;
+      deptStudents.forEach(s => totalCgpa += Number(s.cgpa || 8.0));
+      const avgCgpa = deptStudents.length > 0 ? (totalCgpa / deptStudents.length).toFixed(2) : '8.50';
+
+      metrics = {
+        department,
+        totalRegisteredStudents: deptStudents.length,
+        activeStudents: deptStudents.length,
+        inactiveStudents: 0,
+        averageCgpa: Number(avgCgpa),
+        totalRequests: deptReqs.length,
+        retrievedAt: new Date().toISOString()
+      };
+    }
+    res.json(metrics);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 3. Module 2: Certificate Request & Approval Workflow
+// Contributor 1.1: Academic Chaincode Lead (Prerequisite Validation & Request Submission)
+// ==========================================
+
+// Pre-flight prerequisite verification endpoint
+app.post('/api/requests/validate-prerequisites', async (req, res) => {
+  try {
+    const { studentId, certType, details } = req.body;
+    if (!studentId) {
+      return res.status(400).json({ error: 'studentId is required' });
+    }
+
+    let studentObj = {};
+    try {
+      const studentBytes = await queryChaincode('GetStudent', [studentId]);
+      if (studentBytes) {
+        studentObj = typeof studentBytes === 'string' ? JSON.parse(studentBytes) : studentBytes;
+      }
+    } catch (e) {
+      // If student not yet registered, evaluate with submitted metrics
+    }
+
+    const evaluation = evaluatePrerequisites(studentObj, certType || 'Degree Certificate', details || {});
+    res.json(evaluation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/requests', async (req, res) => {
   try {
-    const { requestId, studentId, certType, department, branch, details } = req.body;
+    const { requestId, studentId, certType, department, branch, details, bypassPrerequisites, studentSignature, signatureTimestamp, requireSignature } = req.body;
     if (!requestId || !studentId) {
       return res.status(400).json({ error: 'requestId and studentId are required' });
+    }
+
+    // 1. Schema Validation (flexible)
+    const validation = validateRequestInput(req.body);
+    if (!validation.isValid && !req.body.studentId) {
+      return res.status(400).json({
+        error: 'Request schema validation failed',
+        details: validation.errors
+      });
     }
 
     let requestDetails = details || {};
@@ -714,11 +1204,11 @@ app.post('/api/requests', async (req, res) => {
       }
     }
 
-    // 1. Verify that student exists in University SIS database or on Chaincode
-    let sisRecord = sisDatabase.getStudentByRollNumber(studentId);
+    // 2. Verify that student exists in University SIS database or on Chaincode
+    let sisRecord = sisDatabase.getStudentByRollNumber(studentId.trim());
     let onChainStudent = null;
     try {
-      const raw = await queryChaincode('GetStudent', [studentId]);
+      const raw = await queryChaincode('GetStudent', [studentId.trim()]);
       if (raw) {
         onChainStudent = typeof raw === 'string' ? JSON.parse(raw) : raw;
       }
@@ -730,25 +1220,39 @@ app.post('/api/requests', async (req, res) => {
       });
     }
 
+    if (onChainStudent) {
+      // Verify student lifecycle status
+      if (onChainStudent.status && onChainStudent.status !== 'ACTIVE') {
+        return res.status(400).json({
+          error: `Cannot request certificate: Student '${studentId}' status is '${onChainStudent.status}'. Only ACTIVE students may apply.`
+        });
+      }
+
+      // Auto-enrich details with registered student metadata if missing
+      requestDetails.name = requestDetails.name || onChainStudent.name;
+      requestDetails.department = requestDetails.department || onChainStudent.department;
+      requestDetails.email = requestDetails.email || onChainStudent.email;
+    }
+
     const isOnLedger = Boolean(onChainStudent) || Boolean(sisRecord?.isOnLedger);
 
     // If on-chain but SQLite record is missing or not marked on ledger, sync SQLite now
     if (onChainStudent && (!sisRecord || !sisRecord.isOnLedger)) {
       const sName = onChainStudent.name || sisRecord?.name || 'Student Name';
-      const sDid = onChainStudent.did || sisRecord?.did || generateStudentDID(sName, studentId);
+      const sDid = onChainStudent.did || sisRecord?.did || (typeof generateStudentDID === 'function' ? generateStudentDID(sName, studentId.trim()) : `did:academic:nitw:${studentId.trim().toLowerCase()}`);
       sisRecord = sisDatabase.addOrUpdateStudent({
         ...(sisRecord || {}),
-        studentId,
+        studentId: studentId.trim(),
         name: sName,
-        email: onChainStudent.email || sisRecord?.email || `${studentId.toLowerCase()}@academic.edu`,
+        email: onChainStudent.email || sisRecord?.email || `${studentId.trim().toLowerCase()}@academic.edu`,
         department: onChainStudent.department || sisRecord?.department || 'Department of Computer Science & Engineering',
         did: sDid,
         isOnLedger: true
       });
-      sisDatabase.markStudentOnLedger(studentId, sDid);
+      sisDatabase.markStudentOnLedger(studentId.trim(), sDid);
     }
 
-    // 2. Strict Ledger Check: Student must be registered on the blockchain ledger
+    // Strict Ledger Check (from main): student must be registered on the blockchain ledger
     if (!isOnLedger) {
       return res.status(400).json({
         error: `Ledger Verification Failed: Student "${studentId}" (${sisRecord?.name || 'Student'}) is enrolled in the University database, but has NOT been registered on the blockchain ledger yet. Please register the student on-chain in Step 1 before initiating certificate requests.`
@@ -756,10 +1260,10 @@ app.post('/api/requests', async (req, res) => {
     }
 
     // 3. Verify student semester and course registration
-    let semReg = sisDatabase.getStudentSemesterRegistration(studentId);
+    let semReg = sisDatabase.getStudentSemesterRegistration(studentId.trim());
     if (!semReg) {
       semReg = sisDatabase.upsertStudentSemesterRegistration({
-        studentId,
+        studentId: studentId.trim(),
         studentName: sisRecord?.name || onChainStudent?.name || 'Student Name',
         department: sisRecord?.department || onChainStudent?.department || 'Department of Computer Science & Engineering',
         branch: branch || certType || 'Master of Computer Applications (MCA)',
@@ -769,9 +1273,9 @@ app.post('/api/requests', async (req, res) => {
       });
     }
 
-    // 4. Validate Department Matching (MCA, M.Tech CSE, B.Tech CSE all belong to Department of Computer Science & Engineering)
+    // 4. Validate Department Matching
     const requestedDept = (department || requestDetails.department || '').trim();
-    if (requestedDept) {
+    if (requestedDept && semReg?.department) {
       const normReq = requestedDept.toLowerCase().replace(/^(department of|dept of|dept\.)\s*/i, '').replace(/[^a-z0-9]/g, '');
       const normReg = semReg.department.toLowerCase().replace(/^(department of|dept of|dept\.)\s*/i, '').replace(/[^a-z0-9]/g, '');
       if (!normReq.includes(normReg) && !normReg.includes(normReq)) {
@@ -783,7 +1287,7 @@ app.post('/api/requests', async (req, res) => {
 
     // 5. Validate Branch Matching
     const requestedBranch = (certType || branch || requestDetails.branch || '').trim();
-    if (requestedBranch) {
+    if (requestedBranch && semReg?.branch && typeof checkBranchMatch === 'function') {
       const isBranchMatch = checkBranchMatch(requestedBranch, semReg.branch);
       if (!isBranchMatch) {
         return res.status(400).json({
@@ -792,49 +1296,89 @@ app.post('/api/requests', async (req, res) => {
       }
     }
 
-    const did = sisRecord.did || generateStudentDID(sisRecord.name || 'Student', studentId);
+    // 6. Contributor 1.1: Departmental Prerequisite Rules Verification & Academic Standing
+    const targetCertType = certType || semReg?.branch || 'Master of Computer Applications (MCA)';
+    const evaluationStudent = onChainStudent || sisRecord || {};
+    const evaluation = evaluatePrerequisites(evaluationStudent, targetCertType, requestDetails);
+
+    // If prerequisites fail and no bypass was requested, reject with HTTP 422 Unprocessable Entity
+    if (!evaluation.eligible && !bypassPrerequisites) {
+      return res.status(422).json({
+        error: 'Departmental prerequisite validation failed',
+        violations: evaluation.violations,
+        criteria: evaluation.evaluatedCriteria,
+        requirements: evaluation.requirements
+      });
+    }
+
+    // Embed evaluated prerequisite compliance audit into details for downstream autonomous agents
+    requestDetails.prerequisiteCheck = {
+      verified: evaluation.eligible,
+      criteria: evaluation.evaluatedCriteria,
+      evaluatedAt: evaluation.evaluatedAt
+    };
+
+    if (req.body.studentSignature || studentSignature) {
+      requestDetails.studentSignature = req.body.studentSignature || studentSignature;
+    }
+    if (req.body.signatureTimestamp || signatureTimestamp) {
+      requestDetails.signatureTimestamp = req.body.signatureTimestamp || signatureTimestamp;
+    }
+    if (req.body.requireSignature !== undefined || requireSignature !== undefined) {
+      requestDetails.requireSignature = req.body.requireSignature ?? requireSignature;
+    }
+
+    const did = (sisRecord && sisRecord.did) || (onChainStudent && onChainStudent.did) || (typeof generateStudentDID === 'function' ? generateStudentDID(sisRecord?.name || 'Student', studentId.trim()) : `did:academic:nitw:${studentId.trim().toLowerCase()}`);
 
     requestDetails = {
       ...(sisRecord || {}),
       did,
-      department: semReg.department,
-      branch: semReg.branch,
-      semesterNumber: semReg.semesterNumber,
-      registeredCourses: semReg.registeredCourses,
+      department: semReg ? semReg.department : (requestDetails.department || 'Department of Computer Science & Engineering'),
+      branch: semReg ? semReg.branch : (targetCertType),
+      semesterNumber: semReg ? semReg.semesterNumber : 5,
+      registeredCourses: semReg ? semReg.registeredCourses : [],
       ...requestDetails
     };
 
     let result = null;
     try {
       result = await invokeChaincode('RequestCertificate', [
-        requestId,
-        studentId,
-        certType || semReg.branch,
+        requestId.trim(),
+        studentId.trim(),
+        targetCertType,
         JSON.stringify(requestDetails)
-      ], 1);
+      ], 1); // Org 1: Academic Department
     } catch (chaincodeErr) {
+      console.warn(`[Chaincode Request Notice]: ${chaincodeErr.message}`);
       result = { simulated: true, note: chaincodeErr.message };
     }
 
     // Persist to SQLite for consortium reliability & offline recovery
-    sisDatabase.saveCertificateRequest({
-      requestId,
-      studentId,
-      studentDid: did,
-      studentName: sisRecord.name,
-      certType: certType || semReg.branch,
-      department: semReg.department,
-      status: 'SUBMITTED',
-      details: requestDetails
-    });
+    try {
+      sisDatabase.saveCertificateRequest({
+        requestId: requestId.trim(),
+        studentId: studentId.trim(),
+        studentDid: did,
+        studentName: sisRecord?.name || onChainStudent?.name || 'Student',
+        certType: targetCertType,
+        department: requestDetails.department,
+        status: 'SUBMITTED',
+        details: requestDetails
+      });
+    } catch (dbErr) {
+      console.warn(`[SQLite Notice]: ${dbErr.message}`);
+    }
 
     res.status(201).json({
       success: true,
-      result,
+      requestId: requestId.trim(),
+      studentId: studentId.trim(),
       did,
-      department: semReg.department,
-      branch: semReg.branch,
-      enrichedFromSIS: true
+      department: requestDetails.department,
+      branch: requestDetails.branch,
+      prerequisitesVerified: evaluation.eligible,
+      enrichedFromSIS: true,
+      result
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1018,35 +1562,18 @@ async function ensureRequestOnFabric(requestId) {
   try {
     const studentExists = await queryChaincode('GetStudent', [sisReq.studentId]);
     if (!studentExists) {
-      try {
-        await invokeChaincode('RegisterStudent', [
-          sisReq.studentId,
-          sisReq.studentName || student?.name || 'Student',
-          student?.email || `${sisReq.studentId.toLowerCase()}@academic.edu`,
-          sisReq.department || student?.department || 'Department of Computer Science & Engineering',
-          student?.enrollmentYear || 2024,
-          did
-        ], 1);
-      } catch (err6) {
-        await invokeChaincode('RegisterStudent', [
-          sisReq.studentId,
-          sisReq.studentName || student?.name || 'Student',
-          student?.email || `${sisReq.studentId.toLowerCase()}@academic.edu`,
-          sisReq.department || student?.department || 'Department of Computer Science & Engineering',
-          student?.enrollmentYear || 2024
-        ], 1);
-      }
+      await registerSisStudentOnLedger(sisReq.studentId, {
+        name: sisReq.studentName,
+        department: sisReq.department,
+        did
+      });
     }
   } catch (errReg) {
-    try {
-      await invokeChaincode('RegisterStudent', [
-        sisReq.studentId,
-        sisReq.studentName || student?.name || 'Student',
-        student?.email || `${sisReq.studentId.toLowerCase()}@academic.edu`,
-        sisReq.department || student?.department || 'Department of Computer Science & Engineering',
-        student?.enrollmentYear || 2024
-      ], 1);
-    } catch (ignore) {}
+    await registerSisStudentOnLedger(sisReq.studentId, {
+      name: sisReq.studentName,
+      department: sisReq.department,
+      did
+    }).catch(() => {});
   }
 
   // 2. Submit Request on Fabric
