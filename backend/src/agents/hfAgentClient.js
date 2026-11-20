@@ -24,10 +24,9 @@ class HFAgentClient {
     this.groqUrl = 'https://api.groq.com/openai/v1/chat/completions';
     this.defaultGroqModel = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
     this.supportedGroqModels = [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
       'openai/gpt-oss-20b',
-      'qwen/qwen3.8-27b'
+      'qwen/qwen3.8-27b',
+      'openai/gpt-oss-120b'
     ];
 
     this.hfRouterUrl = 'https://router.huggingface.co/v1/chat/completions';
@@ -107,7 +106,7 @@ class HFAgentClient {
             { role: 'user', content: userPrompt }
           ],
           temperature: options.temperature || 0.1,
-          max_tokens: options.max_tokens || 400
+          max_tokens: options.max_tokens || 1024
         };
 
         if (isJsonMode) {

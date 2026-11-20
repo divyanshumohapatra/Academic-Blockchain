@@ -311,7 +311,7 @@ Vector Scores (0=Danger, 100=Clean):
 - Institutional Clearance: ${vectorScores.duesAndBacklogs}/100 (Backlogs: ${backlogs}, Dues: ₹${feeDues + libraryDues})
 Detected Flags: ${JSON.stringify(findings)}`;
 
-      const groqRes = await hfClient.generateReasoning(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1, max_tokens: 300 });
+      const groqRes = await hfClient.generateReasoning(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1, max_tokens: 1024 });
       if (groqRes && groqRes.content) {
         aiSource = groqRes.source || 'GROQ_LIVE_API';
         aiModel = groqRes.model || hfClient.defaultGroqModel;
